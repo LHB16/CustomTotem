@@ -28,8 +28,8 @@ public class TotemManagerScreen extends Screen {
     protected void init() {
         int topBarY = 24;
         int btnSpacing = 4;
-        int btnCount = 5;
-        int btnWidth = Math.min(95, (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount);
+        int btnCount = 6;
+        int btnWidth = Math.min(84, (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount);
         int totalTopBarWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
         int startX = (this.width - totalTopBarWidth) / 2;
 
@@ -78,6 +78,16 @@ public class TotemManagerScreen extends Screen {
                     }
                 }
         ).dimensions(startX + (btnWidth + btnSpacing) * 4, topBarY, btnWidth, 20).build());
+
+        // Button 6: Inventory GUI Background Settings
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("🎒 Túi Đồ"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new InventoryGuiSettingsScreen(this));
+                    }
+                }
+        ).dimensions(startX + (btnWidth + btnSpacing) * 5, topBarY, btnWidth, 20).build());
 
         // Center List Widget
         int listY = 62;

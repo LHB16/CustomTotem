@@ -1,6 +1,7 @@
 package com.customtotem.manager;
 
 import com.customtotem.config.TotemConfig;
+import com.customtotem.model.InventoryGuiSettings;
 import com.customtotem.model.TotemDisplaySettings;
 import com.customtotem.model.TotemEntry;
 import com.customtotem.model.TotemMode;
@@ -39,6 +40,7 @@ public class TotemManager {
 
     private final Path baseDir;
     private final Path defaultImagesDir;
+    private final Path inventoryGuiDir;
     private Path customImagesDir = null;
     private final Path configFile;
 
@@ -51,6 +53,10 @@ public class TotemManager {
     private TotemEntry poppingTotem = null;
     private TotemMode mode = TotemMode.SEQUENTIAL;
     private TotemDisplaySettings displaySettings = new TotemDisplaySettings();
+    private InventoryGuiSettings inventoryGuiSettings = new InventoryGuiSettings();
+    private Identifier inventoryGuiTextureId = null;
+    private NativeImageBackedTexture inventoryGuiTexture = null;
+    private final List<String> availableInventoryImages = new ArrayList<>();
 
     private boolean renderingFloatingItem = false;
     private long clientTicks = 0;
@@ -83,6 +89,7 @@ public class TotemManager {
     private TotemManager() {
         this.baseDir = FabricLoader.getInstance().getConfigDir().resolve("custom_totems");
         this.defaultImagesDir = baseDir.resolve("images");
+        this.inventoryGuiDir = baseDir.resolve("inventory");
         this.configFile = baseDir.resolve("config.json");
     }
 
@@ -95,6 +102,9 @@ public class TotemManager {
             if (!Files.exists(defaultImagesDir)) {
                 Files.createDirectories(defaultImagesDir);
             }
+            if (!Files.exists(inventoryGuiDir)) {
+                Files.createDirectories(inventoryGuiDir);
+            }
         } catch (Exception e) {
             LOGGER.error("Failed to create default custom totem directories", e);
         }
@@ -104,6 +114,12 @@ public class TotemManager {
             this.mode = loadedConfig.mode != null ? loadedConfig.mode : TotemMode.SEQUENTIAL;
             if (loadedConfig.displaySettings != null) {
                 this.displaySettings = loadedConfig.displaySettings;
+            }
+            if (loadedConfig.inventoryGuiSettings != null) {
+                this.inventoryGuiSettings = loadedConfig.inventoryGuiSettings;
+            }
+            if (loadedConfig.fullbright != null) {
+                this.displaySettings.setFullbright(loadedConfig.fullbright);
             }
             if (loadedConfig.customImagesDir != null && !loadedConfig.customImagesDir.trim().isEmpty()) {
                 try {
@@ -117,6 +133,8 @@ public class TotemManager {
             }
         }
 
+        scanInventoryImages();
+        loadInventoryGuiTexture();
         reloadAllTexturesAsync(loadedConfig, null);
     }
 
@@ -138,6 +156,8 @@ public class TotemManager {
         config.currentTotemId = this.currentActiveTotem != null ? this.currentActiveTotem.getId() : null;
         config.customImagesDir = this.customImagesDir != null ? this.customImagesDir.toAbsolutePath().toString() : null;
         config.displaySettings = this.displaySettings;
+        config.inventoryGuiSettings = this.inventoryGuiSettings;
+        config.fullbright = this.displaySettings != null ? this.displaySettings.isFullbright() : true;
 
         for (TotemEntry entry : entries) {
             config.entries.add(new TotemConfig.TotemEntryConfig(
@@ -860,6 +880,17 @@ public class TotemManager {
         return displaySettings;
     }
 
+    public boolean isFullbright() {
+        return displaySettings != null && displaySettings.isFullbright();
+    }
+
+    public void setFullbright(boolean fullbright) {
+        if (displaySettings != null) {
+            displaySettings.setFullbright(fullbright);
+            saveConfig();
+        }
+    }
+
     public boolean isRenderingFloatingItem() {
         return renderingFloatingItem;
     }
@@ -915,5 +946,93 @@ public class TotemManager {
 
     public boolean hasCustomTotem() {
         return hasActiveCustomTotem;
+    }
+
+    public Path getInventoryGuiDir() {
+        return inventoryGuiDir;
+    }
+
+    public InventoryGuiSettings getInventoryGuiSettings() {
+        return inventoryGuiSettings;
+    }
+
+    public Identifier getInventoryGuiTexture() {
+        return inventoryGuiTextureId;
+    }
+
+    public List<String> getAvailableInventoryImages() {
+        return availableInventoryImages;
+    }
+
+    public synchronized void scanInventoryImages() {
+        availableInventoryImages.clear();
+        try {
+            if (!Files.exists(inventoryGuiDir)) {
+                Files.createDirectories(inventoryGuiDir);
+            }
+            try (Stream<Path> stream = Files.list(inventoryGuiDir)) {
+                stream.filter(Files::isRegularFile)
+                        .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png"))
+                        .map(p -> p.getFileName().toString())
+                        .forEach(availableInventoryImages::add);
+            }
+            Path activeImages = getImagesDir();
+            if (activeImages != null && Files.exists(activeImages) && !activeImages.equals(inventoryGuiDir)) {
+                try (Stream<Path> stream = Files.list(activeImages)) {
+                    stream.filter(Files::isRegularFile)
+                            .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png"))
+                            .map(p -> p.getFileName().toString())
+                            .filter(name -> !availableInventoryImages.contains(name))
+                            .forEach(availableInventoryImages::add);
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to scan inventory GUI images", e);
+        }
+    }
+
+    public void setInventoryGuiImage(String fileName) {
+        this.inventoryGuiSettings.setImageFileName(fileName);
+        loadInventoryGuiTexture();
+        saveConfig();
+    }
+
+    public void loadInventoryGuiTexture() {
+        String fileName = inventoryGuiSettings.getImageFileName();
+        if (fileName == null || fileName.trim().isEmpty()) {
+            return;
+        }
+
+        Path imgPath = inventoryGuiDir.resolve(fileName);
+        if (!Files.exists(imgPath)) {
+            imgPath = getImagesDir().resolve(fileName);
+        }
+        if (!Files.exists(imgPath)) {
+            LOGGER.warn("Inventory GUI image file not found: {}", fileName);
+            return;
+        }
+
+        try (InputStream in = Files.newInputStream(imgPath)) {
+            NativeImage image = NativeImage.read(in);
+            Identifier id = Identifier.of("customtotem", "inventory_gui_" + Math.abs(fileName.hashCode()));
+            NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/inventory_gui", image);
+
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client != null) {
+                client.execute(() -> {
+                    if (inventoryGuiTexture != null) {
+                        inventoryGuiTexture.close();
+                    }
+                    inventoryGuiTexture = texture;
+                    inventoryGuiTextureId = id;
+                    if (client.getTextureManager() != null) {
+                        client.getTextureManager().registerTexture(id, texture);
+                    }
+                    LOGGER.info("Registered custom inventory GUI texture: {}", fileName);
+                });
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to load inventory GUI texture from: {}", imgPath, e);
+        }
     }
 }

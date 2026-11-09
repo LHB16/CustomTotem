@@ -22,6 +22,7 @@ public class TotemDisplaySettings {
     }
 
     private Preset preset = Preset.MINI_TOTEM;
+    private boolean fullbright = true;
 
     // First person transforms (in model units, divided by 16 when applied)
     private float fpTranslationX = -1.5f;
@@ -65,6 +66,14 @@ public class TotemDisplaySettings {
             tpTranslationZ = 1.0f;
             tpScale = 0.55f;
         }
+    }
+
+    public boolean isFullbright() {
+        return fullbright;
+    }
+
+    public void setFullbright(boolean fullbright) {
+        this.fullbright = fullbright;
     }
 
     public float getFpTranslationX() {

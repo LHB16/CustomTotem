@@ -6,7 +6,8 @@
   "client": [
     "ItemModelManagerMixin",
     "InGameOverlayRendererMixin",
-    "ItemRenderStateAccessor"
+    "ItemRenderStateAccessor",
+    "InventoryScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

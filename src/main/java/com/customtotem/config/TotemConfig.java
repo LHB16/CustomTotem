@@ -1,5 +1,6 @@
 package com.customtotem.config;
 
+import com.customtotem.model.InventoryGuiSettings;
 import com.customtotem.model.TotemDisplaySettings;
 import com.customtotem.model.TotemMode;
 import com.customtotem.model.TotemTextureTransform;
@@ -56,6 +57,8 @@ public class TotemConfig {
     public String customImagesDir = null;
     public List<TotemEntryConfig> entries = new ArrayList<>();
     public TotemDisplaySettings displaySettings = new TotemDisplaySettings();
+    public InventoryGuiSettings inventoryGuiSettings = new InventoryGuiSettings();
+    public Boolean fullbright = null;
 
     public TotemConfig() {
     }

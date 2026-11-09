@@ -55,7 +55,8 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
 
         final float southZ = 0.501f;
         final float northZ = 0.499f;
-        final int renderLight = (displayContext == ItemDisplayContext.GUI) ? 0x00F000F0 : light;
+        final boolean fullbright = TotemManager.getInstance().isFullbright();
+        final int renderLight = (fullbright || displayContext == ItemDisplayContext.GUI) ? 0x00F000F0 : light;
 
         RenderLayer layer = entry.getRenderLayer();
         if (layer == null) return;
