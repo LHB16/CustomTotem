@@ -269,10 +269,10 @@ pub fn build_spritesheet(frames: &[FrameData], target_size: u32) -> Result<RgbaI
     let frame_count = frames.len() as u32;
     let sheet_height = target_size * frame_count;
 
-    // Safety limit: 16384 px max height for OpenGL textures
-    if sheet_height > 16384 {
+    // Safety limit: 32768 px max height for modern textures
+    if sheet_height > 32768 {
         return Err(format!(
-            "Tổng chiều cao ảnh quá lớn ({sheet_height}px, {} frames x {target_size}px). Giới hạn tối đa là 16384px. Hãy giảm số FPS hoặc rút ngắn thời gian video.",
+            "Tổng chiều cao ảnh quá lớn ({sheet_height}px, {} frames x {target_size}px). Giới hạn an toàn tối đa là 32768px. Hãy giảm số FPS hoặc rút ngắn thời gian video khi chọn độ phân giải lớn (512x512 / 1024x1024).",
             frames.len()
         ));
     }

@@ -55,7 +55,8 @@ impl Default for TotemApp {
 }
 
 impl TotemApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        setup_custom_fonts(&cc.egui_ctx);
         let mut app = Self::default();
         if app.ffmpeg_path.is_none() {
             app.status_message = Some((
@@ -239,6 +240,39 @@ impl TotemApp {
     }
 }
 
+fn setup_custom_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    let font_candidates = [
+        r"C:\Windows\Fonts\segoeui.ttf",
+        r"C:\Windows\Fonts\arial.ttf",
+        r"C:\Windows\Fonts\tahoma.ttf",
+    ];
+
+    for path in font_candidates {
+        if let Ok(font_bytes) = std::fs::read(path) {
+            fonts.font_data.insert(
+                "system_vietnamese".to_owned(),
+                egui::FontData::from_owned(font_bytes),
+            );
+
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, "system_vietnamese".to_owned());
+
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, "system_vietnamese".to_owned());
+
+            ctx.set_fonts(fonts);
+            break;
+        }
+    }
+}
+
 impl eframe::App for TotemApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Handle drag and drop files
@@ -343,9 +377,9 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
             ui.add_space(6.0);
 
             // Resolution
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label("Kích thước frame:");
-                let sizes = [32, 64, 128, 256];
+                let sizes = [32, 64, 128, 256, 512, 1024];
                 for s in sizes {
                     let label = format!("{}x{}", s, s);
                     if ui.selectable_label(app.target_size == s, label).clicked() {

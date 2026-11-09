@@ -9,8 +9,8 @@ use eframe::egui;
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([860.0, 640.0])
-            .with_min_inner_size([760.0, 580.0])
+            .with_inner_size([880.0, 660.0])
+            .with_min_inner_size([780.0, 580.0])
             .with_title("Minecraft Totem Video Converter")
             .with_drag_and_drop(true),
         ..Default::default()
