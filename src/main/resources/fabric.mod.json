@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "customtotem",
+  "version": "${version}",
+  "name": "Custom Totem Manager",
+  "description": "In-game dynamic totem manager and custom model renderer",
+  "authors": [
+    "BinhLH"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.customtotem.CustomTotemModClient"
+    ]
+  },
+  "mixins": [
+    "customtotem.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.9",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

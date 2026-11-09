@@ -1,0 +1,19 @@
+{
+  "key.customtotem.open_gui": "Open Totem Manager",
+  "category.customtotem": "Custom Totem Mod",
+  "gui.customtotem.title": "Custom Totem Manager",
+  "gui.customtotem.upload": "Upload Image",
+  "gui.customtotem.open_folder": "Open Images Folder",
+  "gui.customtotem.mode": "Mode: ",
+  "gui.customtotem.mode.single": "SINGLE",
+  "gui.customtotem.mode.sequential": "SEQUENTIAL",
+  "gui.customtotem.mode.random": "RANDOM",
+  "gui.customtotem.display_settings": "Display Settings",
+  "gui.customtotem.preset": "Preset: ",
+  "gui.customtotem.set_current": "Set Current",
+  "gui.customtotem.current": "Selected",
+  "gui.customtotem.delete": "Delete",
+  "gui.customtotem.delete_confirm": "Are you sure you want to delete this totem?",
+  "gui.customtotem.drag_drop_hint": "Drag & Drop PNG images into this window to add immediately!",
+  "gui.customtotem.no_totems": "No custom totems found. Click 'Upload Image' or Drag & Drop PNGs!"
+}
