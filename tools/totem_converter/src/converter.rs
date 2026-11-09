@@ -286,3 +286,104 @@ pub fn build_spritesheet(frames: &[FrameData], target_size: u32) -> Result<RgbaI
 
     Ok(sheet)
 }
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum KeyPart {
+    Num(u64),
+    Str(String),
+}
+
+pub fn natural_sort_key(s: &str) -> Vec<KeyPart> {
+    let mut parts = Vec::new();
+    let mut chars = s.chars().peekable();
+
+    while let Some(&c) = chars.peek() {
+        if c.is_ascii_digit() {
+            let mut num_str = String::new();
+            while let Some(&d) = chars.peek() {
+                if d.is_ascii_digit() {
+                    num_str.push(d);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            if let Ok(n) = num_str.parse::<u64>() {
+                parts.push(KeyPart::Num(n));
+            } else {
+                parts.push(KeyPart::Str(num_str));
+            }
+        } else {
+            let mut text = String::new();
+            while let Some(&ch) = chars.peek() {
+                if !ch.is_ascii_digit() {
+                    text.push(ch.to_ascii_lowercase());
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            parts.push(KeyPart::Str(text));
+        }
+    }
+
+    parts
+}
+
+pub fn is_image_file(path: &Path) -> bool {
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        let ext = ext.to_lowercase();
+        matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif")
+    } else {
+        false
+    }
+}
+
+pub fn load_image_sequence(
+    folder_path: &Path,
+    target_size: u32,
+    crop_mode: CropMode,
+    fps: u32,
+) -> Result<Vec<FrameData>, String> {
+    if !folder_path.is_dir() {
+        return Err(format!("Đường dẫn không phải là thư mục: {}", folder_path.display()));
+    }
+
+    let entries = std::fs::read_dir(folder_path)
+        .map_err(|e| format!("Không thể đọc thư mục: {}", e))?;
+
+    let mut image_files: Vec<PathBuf> = Vec::new();
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_file() && is_image_file(&p) {
+            image_files.push(p);
+        }
+    }
+
+    if image_files.is_empty() {
+        return Err("Thư mục không chứa bất kỳ file ảnh nào (.png, .jpg, .jpeg, .webp, .bmp)".to_string());
+    }
+
+    // Sort files naturally by filename (e.g. frame_2 before frame_10)
+    image_files.sort_by(|a, b| {
+        let name_a = a.file_name().unwrap_or_default().to_string_lossy();
+        let name_b = b.file_name().unwrap_or_default().to_string_lossy();
+        natural_sort_key(&name_a).cmp(&natural_sort_key(&name_b))
+    });
+
+    let delay_ms = (1000 / fps).max(20);
+    let mut frames = Vec::with_capacity(image_files.len());
+
+    for path in &image_files {
+        let img = image::open(path)
+            .map_err(|e| format!("Không thể mở ảnh {}: {}", path.file_name().unwrap_or_default().to_string_lossy(), e))?;
+        let rgba = img.to_rgba8();
+        let processed = process_frame(&rgba, target_size, crop_mode);
+        frames.push(FrameData {
+            image: processed,
+            delay_ms,
+        });
+    }
+
+    Ok(frames)
+}

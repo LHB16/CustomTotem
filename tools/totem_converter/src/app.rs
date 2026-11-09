@@ -67,7 +67,81 @@ impl TotemApp {
         app
     }
 
+    pub fn load_folder(&mut self, path: PathBuf, ctx: &egui::Context) {
+        self.input_path = Some(path.clone());
+        if let Some(folder_name) = path.file_name() {
+            self.totem_name = folder_name.to_string_lossy().to_string();
+        }
+        self.process_folder(&path, ctx);
+    }
+
+    fn process_folder(&mut self, path: &std::path::Path, ctx: &egui::Context) {
+        self.status_message = Some(("Đang nạp chuỗi ảnh từ thư mục...".to_string(), false));
+        self.is_processing = true;
+
+        match converter::load_image_sequence(path, self.target_size, self.crop_mode, self.fps) {
+            Ok(frames) => {
+                let count = frames.len();
+                self.frames = frames;
+                self.current_frame_idx = 0;
+                self.update_preview_texture(ctx);
+                self.status_message = Some((
+                    format!(
+                        "Nạp thành công {} khung hình từ thư mục! (Kích thước frame: {}x{} px)",
+                        count, self.target_size, self.target_size
+                    ),
+                    false,
+                ));
+            }
+            Err(e) => {
+                self.status_message = Some((format!("Lỗi nạp thư mục ảnh: {}", e), true));
+            }
+        }
+        self.is_processing = false;
+    }
+
+    fn process_gif(&mut self, path: &std::path::Path, ctx: &egui::Context) {
+        self.status_message = Some(("Đang giải mã GIF...".to_string(), false));
+        match converter::decode_gif(path, self.target_size, self.crop_mode) {
+            Ok(frames) => {
+                self.status_message = Some((
+                    format!("Đã nạp thành công {} khung hình từ GIF!", frames.len()),
+                    false,
+                ));
+                self.frames = frames;
+                self.current_frame_idx = 0;
+                self.update_preview_texture(ctx);
+            }
+            Err(e) => {
+                self.status_message = Some((format!("Lỗi khi nạp GIF: {}", e), true));
+            }
+        }
+    }
+
+    fn reload_current(&mut self, ctx: &egui::Context) {
+        let Some(ref path) = self.input_path.clone() else { return };
+        if path.is_dir() {
+            self.process_folder(&path, ctx);
+        } else {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            if ext == "gif" {
+                self.process_gif(&path, ctx);
+            } else {
+                self.process_video(ctx);
+            }
+        }
+    }
+
     fn load_file(&mut self, path: PathBuf, ctx: &egui::Context) {
+        if path.is_dir() {
+            self.load_folder(path, ctx);
+            return;
+        }
+
         self.input_path = Some(path.clone());
         if let Some(stem) = path.file_stem() {
             self.totem_name = stem.to_string_lossy().to_string();
@@ -80,21 +154,7 @@ impl TotemApp {
             .to_lowercase();
 
         if ext == "gif" {
-            self.status_message = Some(("Đang giải mã GIF...".to_string(), false));
-            match converter::decode_gif(&path, self.target_size, self.crop_mode) {
-                Ok(frames) => {
-                    self.status_message = Some((
-                        format!("Đã nạp thành công {} khung hình từ GIF!", frames.len()),
-                        false,
-                    ));
-                    self.frames = frames;
-                    self.current_frame_idx = 0;
-                    self.update_preview_texture(ctx);
-                }
-                Err(e) => {
-                    self.status_message = Some((format!("Lỗi khi nạp GIF: {}", e), true));
-                }
-            }
+            self.process_gif(&path, ctx);
         } else {
             // Video file
             if let Some(ref ff) = self.ffmpeg_path {
@@ -302,7 +362,7 @@ impl eframe::App for TotemApp {
             // Header
             ui.vertical_centered(|ui| {
                 ui.heading(RichText::new("Minecraft Totem Video Converter").size(24.0).strong().color(Color32::from_rgb(0, 210, 140)));
-                ui.label(RichText::new("Chuyển đổi Video / GIF thành Totem động dạng Vertical Spritesheet chuẩn Minecraft").color(Color32::LIGHT_GRAY));
+                ui.label(RichText::new("Chuyển đổi Video / GIF / Thư mục ảnh thành Totem động dạng Vertical Spritesheet chuẩn Minecraft").color(Color32::LIGHT_GRAY));
             });
             ui.add_space(10.0);
 
@@ -341,16 +401,18 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
         .rounding(8.0)
         .inner_margin(12.0)
         .show(ui, |ui| {
-            ui.label(RichText::new("1. Chọn file nguồn (Video hoặc GIF)").strong().size(15.0));
+            ui.label(RichText::new("1. Chọn nguồn ảnh (Video, GIF hoặc Thư mục)").strong().size(15.0));
             ui.add_space(4.0);
 
-            ui.horizontal(|ui| {
-                if ui.button("📂 Chọn File Video / GIF...").clicked() {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("📂 Chọn Video / GIF...").clicked() {
                     let mut dialog = rfd::FileDialog::new()
                         .add_filter("Video & GIF", &["mp4", "gif", "webm", "avi", "mov", "mkv"]);
 
                     if let Some(ref p) = app.input_path {
-                        if let Some(parent) = p.parent() {
+                        if p.is_dir() {
+                            dialog = dialog.set_directory(p);
+                        } else if let Some(parent) = p.parent() {
                             dialog = dialog.set_directory(parent);
                         }
                     } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
@@ -365,13 +427,39 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
                     }
                 }
 
-                if let Some(ref p) = app.input_path {
-                    let file_name = p.file_name().unwrap_or_default().to_string_lossy();
-                    ui.label(RichText::new(format!("📄 {}", file_name)).strong().color(Color32::from_rgb(100, 200, 255)));
-                } else {
-                    ui.label(RichText::new("Kéo thả file vào cửa sổ...").italics().color(Color32::GRAY));
+                if ui.button("📁 Chọn Thư mục ảnh...").clicked() {
+                    let mut dialog = rfd::FileDialog::new();
+
+                    if let Some(ref p) = app.input_path {
+                        if p.is_dir() {
+                            dialog = dialog.set_directory(p);
+                        } else if let Some(parent) = p.parent() {
+                            dialog = dialog.set_directory(parent);
+                        }
+                    } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                        let downloads = PathBuf::from(&userprofile).join("Downloads");
+                        if downloads.exists() {
+                            dialog = dialog.set_directory(downloads);
+                        }
+                    }
+
+                    if let Some(folder) = dialog.pick_folder() {
+                        app.load_folder(folder, ctx);
+                    }
                 }
             });
+
+            ui.add_space(4.0);
+            if let Some(ref p) = app.input_path {
+                let file_name = p.file_name().unwrap_or_default().to_string_lossy();
+                if p.is_dir() {
+                    ui.label(RichText::new(format!("📁 Thư mục: {}", file_name)).strong().color(Color32::from_rgb(255, 205, 90)));
+                } else {
+                    ui.label(RichText::new(format!("📄 File: {}", file_name)).strong().color(Color32::from_rgb(100, 200, 255)));
+                }
+            } else {
+                ui.label(RichText::new("Kéo thả file hoặc thư mục vào cửa sổ...").italics().color(Color32::GRAY));
+            }
 
             ui.add_space(10.0);
             ui.separator();
@@ -396,7 +484,7 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
                     if ui.selectable_label(app.target_size == s, label).clicked() {
                         app.target_size = s;
                         if app.input_path.is_some() {
-                            app.process_video(ctx);
+                            app.reload_current(ctx);
                         }
                     }
                 }
@@ -412,7 +500,7 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
                     if ui.selectable_label(app.fps == f, label).clicked() {
                         app.fps = f;
                         if app.input_path.is_some() {
-                            app.process_video(ctx);
+                            app.reload_current(ctx);
                         }
                     }
                 }
@@ -426,35 +514,37 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
                     .selected_text(app.crop_mode.label())
                     .show_ui(ui, |ui| {
                         if ui.selectable_value(&mut app.crop_mode, CropMode::CenterCrop, CropMode::CenterCrop.label()).clicked() {
-                            if app.input_path.is_some() { app.process_video(ctx); }
+                            if app.input_path.is_some() { app.reload_current(ctx); }
                         }
                         if ui.selectable_value(&mut app.crop_mode, CropMode::Fit, CropMode::Fit.label()).clicked() {
-                            if app.input_path.is_some() { app.process_video(ctx); }
+                            if app.input_path.is_some() { app.reload_current(ctx); }
                         }
                         if ui.selectable_value(&mut app.crop_mode, CropMode::Stretch, CropMode::Stretch.label()).clicked() {
-                            if app.input_path.is_some() { app.process_video(ctx); }
+                            if app.input_path.is_some() { app.reload_current(ctx); }
                         }
                     });
             });
 
-            // Video Time Trimming
+            // Video Time Trimming (chỉ hiển thị khi file là video)
             if let Some(ref p) = app.input_path {
-                let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-                if ext != "gif" {
-                    ui.add_space(10.0);
-                    ui.separator();
-                    ui.add_space(6.0);
-                    ui.label(RichText::new("Cắt thời gian Video (giây)").strong());
+                if !p.is_dir() {
+                    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                    if ext != "gif" {
+                        ui.add_space(10.0);
+                        ui.separator();
+                        ui.add_space(6.0);
+                        ui.label(RichText::new("Cắt thời gian Video (giây)").strong());
 
-                    ui.horizontal(|ui| {
-                        ui.label("Bắt đầu:");
-                        ui.add(egui::DragValue::new(&mut app.start_time).speed(0.1).range(0.0..=app.video_duration).suffix("s"));
-                        ui.label("Kết thúc:");
-                        ui.add(egui::DragValue::new(&mut app.end_time).speed(0.1).range(0.0..=app.video_duration).suffix("s"));
-                    });
+                        ui.horizontal(|ui| {
+                            ui.label("Bắt đầu:");
+                            ui.add(egui::DragValue::new(&mut app.start_time).speed(0.1).range(0.0..=app.video_duration).suffix("s"));
+                            ui.label("Kết thúc:");
+                            ui.add(egui::DragValue::new(&mut app.end_time).speed(0.1).range(0.0..=app.video_duration).suffix("s"));
+                        });
 
-                    if ui.button("Áp dụng cắt thời gian").clicked() {
-                        app.process_video(ctx);
+                        if ui.button("Áp dụng cắt thời gian").clicked() {
+                            app.process_video(ctx);
+                        }
                     }
                 }
             }
@@ -553,12 +643,17 @@ fn render_right_panel(ui: &mut Ui, app: &mut TotemApp) {
                     .set_file_name(&default_name);
 
                 // Smart default directory:
-                // 1. Same folder as the input video/gif
+                // 1. Same folder as the input video/gif or the image sequence folder itself
                 // 2. Pictures folder (safe and writable)
                 if let Some(ref p) = app.input_path {
-                    if let Some(parent) = p.parent() {
-                        dialog = dialog.set_directory(parent);
-                    }
+                    let dir = if p.is_dir() {
+                        p.as_path()
+                    } else if let Some(parent) = p.parent() {
+                        parent
+                    } else {
+                        p.as_path()
+                    };
+                    dialog = dialog.set_directory(dir);
                 } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
                     let pic_dir = PathBuf::from(&userprofile).join("Pictures");
                     if pic_dir.exists() {

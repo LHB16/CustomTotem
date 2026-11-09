@@ -40,3 +40,52 @@ fn test_large_resolutions_512_and_1024() {
         assert_eq!(h / w, 5);
     }
 }
+
+#[test]
+fn test_natural_sort_ordering() {
+    use totem_converter::converter::natural_sort_key;
+
+    let mut names = vec![
+        "frame_10.png",
+        "frame_1.png",
+        "frame_2.png",
+        "frame_20.png",
+        "frame_0000.png",
+        "frame_0003.png",
+    ];
+
+    names.sort_by(|a, b| natural_sort_key(a).cmp(&natural_sort_key(b)));
+
+    assert_eq!(
+        names,
+        vec![
+            "frame_0000.png",
+            "frame_1.png",
+            "frame_2.png",
+            "frame_0003.png",
+            "frame_10.png",
+            "frame_20.png",
+        ]
+    );
+}
+
+#[test]
+fn test_load_image_sequence_folder() {
+    use totem_converter::converter::{load_image_sequence, CropMode};
+    use std::fs;
+
+    let test_dir = std::env::temp_dir().join("totem_test_seq");
+    let _ = fs::remove_dir_all(&test_dir);
+    fs::create_dir_all(&test_dir).unwrap();
+
+    let img = RgbaImage::from_pixel(32, 32, Rgba([255, 0, 0, 255]));
+    img.save(test_dir.join("frame_10.png")).unwrap();
+    img.save(test_dir.join("frame_2.png")).unwrap();
+    img.save(test_dir.join("frame_1.png")).unwrap();
+
+    let frames = load_image_sequence(&test_dir, 64, CropMode::CenterCrop, 15).unwrap();
+    assert_eq!(frames.len(), 3);
+    assert_eq!(frames[0].image.dimensions(), (64, 64));
+
+    let _ = fs::remove_dir_all(&test_dir);
+}
