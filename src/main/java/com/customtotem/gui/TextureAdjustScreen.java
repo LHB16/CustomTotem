@@ -10,6 +10,8 @@ import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.text.Text;
 
 public class TextureAdjustScreen extends Screen {
+    private static final int[] RESOLUTION_OPTIONS = {0, 16, 32, 64, 128, 256, 512, 1024};
+
     private final Screen parent;
     private final TotemEntry entry;
     private final TotemTextureTransform transform;
@@ -26,13 +28,31 @@ public class TextureAdjustScreen extends Screen {
         this.transform = entry.getTransform();
     }
 
+    private int getResolutionIndex(int res) {
+        for (int i = 0; i < RESOLUTION_OPTIONS.length; i++) {
+            if (RESOLUTION_OPTIONS[i] == res) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private Text getResolutionMessage(int res) {
+        if (res <= 0) {
+            return Text.literal("Resolution: §eNative (Gốc)");
+        }
+        return Text.literal("Resolution: §b" + res + "x" + res + " px");
+    }
+
     @Override
     protected void init() {
         int centerX = this.width / 2;
-        int controlsY = 145;
-        int btnWidth = 115;
+        int controlsY = 135;
+        int fullWidth = 240;
+        int halfWidth = 118;
+        int rowGap = 24;
 
-        // Button: Fit Mode (Fit, Stretch, Fill)
+        // Row 1: Fit Mode Button (Fit, Stretch, Fill)
         fitModeButton = ButtonWidget.builder(
                 Text.literal("Fit: " + transform.getFitMode().getDisplayName()),
                 btn -> {
@@ -40,12 +60,38 @@ public class TextureAdjustScreen extends Screen {
                     btn.setMessage(Text.literal("Fit: " + transform.getFitMode().getDisplayName()));
                     TotemManager.getInstance().saveConfig();
                 }
-        ).dimensions(centerX - 120, controlsY, 240, 20).build();
+        ).dimensions(centerX - 120, controlsY, fullWidth, 20).build();
         this.addDrawableChild(fitModeButton);
 
-        // Zoom / Scale Slider: range 0.2f to 3.0f
+        // Row 2: Resolution Slider (Native, 16x16, 32x32, 64x64, 128x128, 256x256, 512x512, 1024x1024)
+        int initialResIdx = getResolutionIndex(transform.getResolution());
+        double initialResVal = (double) initialResIdx / (double) (RESOLUTION_OPTIONS.length - 1);
         this.addDrawableChild(new SliderWidget(
-                centerX - 120, controlsY + 25, 240, 20,
+                centerX - 120, controlsY + rowGap, fullWidth, 20,
+                getResolutionMessage(transform.getResolution()),
+                initialResVal
+        ) {
+            @Override
+            protected void updateMessage() {
+                int idx = (int) Math.round(this.value * (RESOLUTION_OPTIONS.length - 1));
+                setMessage(getResolutionMessage(RESOLUTION_OPTIONS[idx]));
+            }
+
+            @Override
+            protected void applyValue() {
+                int idx = (int) Math.round(this.value * (RESOLUTION_OPTIONS.length - 1));
+                int chosenRes = RESOLUTION_OPTIONS[idx];
+                if (transform.getResolution() != chosenRes) {
+                    transform.setResolution(chosenRes);
+                    TotemManager.getInstance().applyResolution(entry);
+                    TotemManager.getInstance().saveConfig();
+                }
+            }
+        });
+
+        // Row 3: Zoom / Scale Slider: range 0.2f to 3.0f
+        this.addDrawableChild(new SliderWidget(
+                centerX - 120, controlsY + rowGap * 2, fullWidth, 20,
                 Text.literal(String.format("Zoom: %.2fx", transform.getScale())),
                 (transform.getScale() - 0.2) / (3.0 - 0.2)
         ) {
@@ -62,9 +108,9 @@ public class TextureAdjustScreen extends Screen {
             }
         });
 
-        // Offset X Slider: range -1.0f to 1.0f
+        // Row 4: Offset X and Offset Y Sliders (Side-by-side)
         this.addDrawableChild(new SliderWidget(
-                centerX - 120, controlsY + 50, 240, 20,
+                centerX - 120, controlsY + rowGap * 3, halfWidth, 20,
                 Text.literal(String.format("Offset X: %.2f", transform.getOffsetX())),
                 (transform.getOffsetX() - (-1.0)) / (1.0 - (-1.0))
         ) {
@@ -81,9 +127,8 @@ public class TextureAdjustScreen extends Screen {
             }
         });
 
-        // Offset Y Slider: range -1.0f to 1.0f
         this.addDrawableChild(new SliderWidget(
-                centerX - 120, controlsY + 75, 240, 20,
+                centerX + 2, controlsY + rowGap * 3, halfWidth, 20,
                 Text.literal(String.format("Offset Y: %.2f", transform.getOffsetY())),
                 (transform.getOffsetY() - (-1.0)) / (1.0 - (-1.0))
         ) {
@@ -100,7 +145,7 @@ public class TextureAdjustScreen extends Screen {
             }
         });
 
-        // Toggle Flip Horizontal
+        // Row 5: Toggle Flip Horizontal and Flip Vertical
         flipHButton = ButtonWidget.builder(
                 Text.literal("Flip H: " + (transform.isFlipX() ? "§aON" : "§7OFF")),
                 btn -> {
@@ -108,10 +153,9 @@ public class TextureAdjustScreen extends Screen {
                     btn.setMessage(Text.literal("Flip H: " + (transform.isFlipX() ? "§aON" : "§7OFF")));
                     TotemManager.getInstance().saveConfig();
                 }
-        ).dimensions(centerX - 120, controlsY + 100, btnWidth, 20).build();
+        ).dimensions(centerX - 120, controlsY + rowGap * 4, halfWidth, 20).build();
         this.addDrawableChild(flipHButton);
 
-        // Toggle Flip Vertical
         flipVButton = ButtonWidget.builder(
                 Text.literal("Flip V: " + (transform.isFlipY() ? "§aON" : "§7OFF")),
                 btn -> {
@@ -119,10 +163,10 @@ public class TextureAdjustScreen extends Screen {
                     btn.setMessage(Text.literal("Flip V: " + (transform.isFlipY() ? "§aON" : "§7OFF")));
                     TotemManager.getInstance().saveConfig();
                 }
-        ).dimensions(centerX + 5, controlsY + 100, btnWidth, 20).build();
+        ).dimensions(centerX + 2, controlsY + rowGap * 4, halfWidth, 20).build();
         this.addDrawableChild(flipVButton);
 
-        // Toggle Animation (if spritesheet detected)
+        // Row 6: Toggle Animation & Speed FPS (if spritesheet detected)
         if (entry.getFrameCount() > 1) {
             animButton = ButtonWidget.builder(
                     Text.literal("Anim: " + (transform.isAnimated() ? "§aON" : "§7OFF")),
@@ -131,7 +175,7 @@ public class TextureAdjustScreen extends Screen {
                         btn.setMessage(Text.literal("Anim: " + (transform.isAnimated() ? "§aON" : "§7OFF")));
                         TotemManager.getInstance().saveConfig();
                     }
-            ).dimensions(centerX - 120, controlsY + 125, btnWidth, 20).build();
+            ).dimensions(centerX - 120, controlsY + rowGap * 5, halfWidth, 20).build();
             this.addDrawableChild(animButton);
 
             // FPS cycle button: 10, 15, 20, 30, 45, 60
@@ -154,27 +198,27 @@ public class TextureAdjustScreen extends Screen {
                         btn.setMessage(Text.literal("Speed: §b" + entry.getFps() + " FPS"));
                         TotemManager.getInstance().saveConfig();
                     }
-            ).dimensions(centerX + 5, controlsY + 125, btnWidth, 20).build();
+            ).dimensions(centerX + 2, controlsY + rowGap * 5, halfWidth, 20).build();
             this.addDrawableChild(fpsButton);
         }
 
-        int bottomY = controlsY + (entry.getFrameCount() > 1 ? 150 : 125);
+        int bottomY = controlsY + (entry.getFrameCount() > 1 ? rowGap * 6 : rowGap * 5);
 
-        // Reset Button
+        // Bottom Row: Reset Button & Done Button
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("Reset"),
                 btn -> {
                     transform.reset();
+                    TotemManager.getInstance().applyResolution(entry);
                     TotemManager.getInstance().saveConfig();
                     this.clearAndInit();
                 }
-        ).dimensions(centerX - 120, bottomY, btnWidth, 20).build());
+        ).dimensions(centerX - 120, bottomY, halfWidth, 20).build());
 
-        // Back / Save Button
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("Done"),
                 btn -> this.close()
-        ).dimensions(centerX + 5, bottomY, btnWidth, 20).build());
+        ).dimensions(centerX + 2, bottomY, halfWidth, 20).build());
     }
 
     @Override
@@ -223,8 +267,12 @@ public class TextureAdjustScreen extends Screen {
         context.fill(previewX + boxSize - 1, previewY, previewX + boxSize, previewY + boxSize, 0xFF888888);
 
         // Resolution label below preview
-        String resText = String.format("Original: %dx%d (%s)", entry.getWidth(), entry.getHeight(),
-                entry.getFrameCount() > 1 ? entry.getFrameCount() + " frames" : "Single image");
+        int currentRes = transform.getResolution();
+        String currentResStr = (currentRes <= 0) ? "Native" : (currentRes + "x" + currentRes);
+        String resText = String.format("Size: %dx%d (%s) | Res: %s",
+                entry.getWidth(), entry.getHeight(),
+                entry.getFrameCount() > 1 ? entry.getFrameCount() + " frames" : "Single",
+                currentResStr);
         context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), this.width / 2, previewY + boxSize + 5, 0xAAAAAA);
     }
 }

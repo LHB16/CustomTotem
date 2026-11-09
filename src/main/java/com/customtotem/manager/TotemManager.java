@@ -362,6 +362,10 @@ public class TotemManager {
                         TotemTextureTransform transform = (configEntry != null && configEntry.transform != null)
                                 ? configEntry.transform : null;
 
+                        if (transform != null && transform.getResolution() > 0) {
+                            image = createResampledImage(image, cols, rows, transform.getResolution());
+                        }
+
                         preloadedList.add(new PreloadedTotem(
                                 file, image, width, height, uniqueId, fileName, displayName,
                                 enabled, cols, rows, frameCount, frameTime, fps, transform
@@ -441,6 +445,61 @@ public class TotemManager {
         });
     }
 
+    public static NativeImage createResampledImage(NativeImage originalImage, int cols, int rows, int targetRes) {
+        if (targetRes <= 0 || originalImage == null) {
+            return originalImage;
+        }
+        int origW = originalImage.getWidth();
+        int origH = originalImage.getHeight();
+        int safeCols = Math.max(1, cols);
+        int safeRows = Math.max(1, rows);
+
+        int origFrameW = origW / safeCols;
+        int origFrameH = origH / safeRows;
+
+        int targetFrameW = targetRes;
+        int targetFrameH = (int) Math.max(1, Math.round((float) targetRes * (float) origFrameH / (float) Math.max(1, origFrameW)));
+
+        int newTotalW = targetFrameW * safeCols;
+        int newTotalH = targetFrameH * safeRows;
+
+        if (newTotalW == origW && newTotalH == origH) {
+            return originalImage;
+        }
+
+        NativeImage targetImage = new NativeImage(originalImage.getFormat(), newTotalW, newTotalH, false);
+        originalImage.resizeSubRectTo(0, 0, origW, origH, targetImage);
+        originalImage.close();
+        return targetImage;
+    }
+
+    public void applyResolution(TotemEntry entry) {
+        if (entry == null || entry.getTextureId() == null) {
+            return;
+        }
+        Path file = getImagesDir().resolve(entry.getFileName());
+        if (!Files.exists(file)) {
+            return;
+        }
+
+        try (InputStream in = Files.newInputStream(file)) {
+            NativeImage originalImage = NativeImage.read(in);
+            int targetRes = entry.getTransform().getResolution();
+            NativeImage finalImage = createResampledImage(originalImage, entry.getColumns(), entry.getRows(), targetRes);
+
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client != null && client.getTextureManager() != null) {
+                NativeImageBackedTexture newTexture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), finalImage);
+                client.getTextureManager().registerTexture(entry.getTextureId(), newTexture);
+                entry.setTexture(newTexture);
+                entry.setTextureRegistered(true);
+            }
+            entry.invalidatePrecomputedCache();
+        } catch (Exception e) {
+            LOGGER.error("Failed to apply resolution to totem: {}", entry.getFileName(), e);
+        }
+    }
+
     public void ensureTextureRegistered(TotemEntry entry) {
         if (entry == null || entry.getTextureId() == null || entry.isTextureRegistered()) {
             return;
@@ -455,6 +514,9 @@ public class TotemManager {
                 if (Files.exists(file)) {
                     try (InputStream in = Files.newInputStream(file)) {
                         NativeImage image = NativeImage.read(in);
+                        if (entry.getTransform().getResolution() > 0) {
+                            image = createResampledImage(image, entry.getColumns(), entry.getRows(), entry.getTransform().getResolution());
+                        }
                         NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), image);
                         client.getTextureManager().registerTexture(entry.getTextureId(), texture);
                         entry.setTexture(texture);
@@ -582,6 +644,9 @@ public class TotemManager {
             entry.setTextureId(textureId);
             entry.setTexture(texture);
             entry.setTextureRegistered(true);
+            if (entry.getTransform().getResolution() > 0) {
+                applyResolution(entry);
+            }
 
             entries.add(entry);
             updateActiveCache();

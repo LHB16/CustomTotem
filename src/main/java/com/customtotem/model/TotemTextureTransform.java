@@ -29,6 +29,7 @@ public class TotemTextureTransform {
     private boolean flipX = false;
     private boolean flipY = false;
     private boolean animated = true;
+    private int resolution = 0; // 0 = Native (Original), or 16, 32, 64, 128, 256, 512, 1024
     private transient Runnable changeListener = null;
 
     public TotemTextureTransform() {
@@ -107,6 +108,15 @@ public class TotemTextureTransform {
         markDirty();
     }
 
+    public int getResolution() {
+        return resolution;
+    }
+
+    public void setResolution(int resolution) {
+        this.resolution = Math.max(0, resolution);
+        markDirty();
+    }
+
     public void reset() {
         this.fitMode = FitMode.FIT;
         this.scale = 1.0f;
@@ -114,6 +124,7 @@ public class TotemTextureTransform {
         this.offsetY = 0.0f;
         this.flipX = false;
         this.flipY = false;
+        this.resolution = 0;
         markDirty();
     }
 }
