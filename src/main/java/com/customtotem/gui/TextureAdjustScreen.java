@@ -44,6 +44,15 @@ public class TextureAdjustScreen extends Screen {
         return Text.literal("Resolution: §b" + res + "x" + res + " px");
     }
 
+    private Text getFpsButtonMessage() {
+        int currentFps = entry.getFps();
+        int baseFps = entry.getBaseFps();
+        if (currentFps < baseFps) {
+            return Text.literal("Speed: §b" + currentFps + " FPS §e(Step)");
+        }
+        return Text.literal("Speed: §a" + currentFps + " FPS");
+    }
+
     @Override
     protected void init() {
         int centerX = this.width / 2;
@@ -180,7 +189,7 @@ public class TextureAdjustScreen extends Screen {
 
             // FPS cycle button: 10, 15, 20, 30, 45, 60
             ButtonWidget fpsButton = ButtonWidget.builder(
-                    Text.literal("Speed: §b" + entry.getFps() + " FPS"),
+                    getFpsButtonMessage(),
                     btn -> {
                         int[] fpsOptions = {10, 15, 20, 30, 45, 60};
                         int current = entry.getFps();
@@ -195,7 +204,7 @@ public class TextureAdjustScreen extends Screen {
                             }
                         }
                         entry.setFps(nextFps);
-                        btn.setMessage(Text.literal("Speed: §b" + entry.getFps() + " FPS"));
+                        btn.setMessage(getFpsButtonMessage());
                         TotemManager.getInstance().saveConfig();
                     }
             ).dimensions(centerX + 2, controlsY + rowGap * 5, halfWidth, 20).build();
@@ -269,10 +278,13 @@ public class TextureAdjustScreen extends Screen {
         // Resolution label below preview
         int currentRes = transform.getResolution();
         String currentResStr = (currentRes <= 0) ? "Native" : (currentRes + "x" + currentRes);
-        String resText = String.format("Size: %dx%d (%s) | Res: %s",
+        String speedDesc = (entry.getFrameCount() > 1)
+                ? (entry.getFps() < entry.getBaseFps() ? String.format(" | %d/%dfps Step", entry.getFps(), entry.getBaseFps()) : String.format(" | %dfps", entry.getFps()))
+                : "";
+        String resText = String.format("Size: %dx%d (%s) | Res: %s%s",
                 entry.getWidth(), entry.getHeight(),
                 entry.getFrameCount() > 1 ? entry.getFrameCount() + " frames" : "Single",
-                currentResStr);
+                currentResStr, speedDesc);
         context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), this.width / 2, previewY + boxSize + 5, 0xAAAAAA);
     }
 }

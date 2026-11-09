@@ -17,6 +17,7 @@ public class TotemEntry {
     private int rows = 1;
     private int frameTime = 2; // Default 2 ticks per frame (10 FPS)
     private int fps = 20;      // Target playback FPS (10, 15, 20, 30, 45, 60...)
+    private int baseFps = 60;  // Timeline Base FPS (e.g. 60 FPS)
     private TotemTextureTransform transform;
 
     private transient Identifier textureId;
@@ -47,6 +48,7 @@ public class TotemEntry {
         this.frameCount = Math.max(1, frameCount);
         this.frameTime = 2;
         this.fps = 20;
+        this.baseFps = 60;
         this.transform = new TotemTextureTransform();
         this.transform.setChangeListener(this::invalidatePrecomputedCache);
         if (this.frameCount <= 1) {
@@ -130,6 +132,15 @@ public class TotemEntry {
         invalidatePrecomputedCache();
     }
 
+    public int getBaseFps() {
+        return baseFps > 0 ? baseFps : 60;
+    }
+
+    public void setBaseFps(int baseFps) {
+        this.baseFps = Math.max(1, baseFps);
+        invalidatePrecomputedCache();
+    }
+
     public TotemTextureTransform getTransform() {
         if (transform == null) {
             transform = new TotemTextureTransform();
@@ -189,9 +200,20 @@ public class TotemEntry {
         if (!getTransform().isAnimated() || frameCount <= 1) {
             return 0;
         }
-        // Millisecond real-time timing for ultra-smooth 10, 15, 20, 30, 45, 60 FPS
-        long msPerFrame = (fps > 0) ? Math.max(1, 1000 / fps) : Math.max(1, frameTime * 50);
-        return (int) ((timeOrTick / msPerFrame) % frameCount);
+        int effectiveBaseFps = getBaseFps();
+        int displayFps = (fps > 0) ? fps : effectiveBaseFps;
+
+        if (displayFps >= effectiveBaseFps) {
+            // Smooth playback at base FPS
+            long msPerFrame = Math.max(1, 1000 / effectiveBaseFps);
+            return (int) ((timeOrTick / msPerFrame) % frameCount);
+        } else {
+            // Stepped Frame Skipping: Quantize time to displayFps chunks and sample from baseFps timeline
+            long intervalMs = Math.max(1, 1000 / displayFps);
+            long quantizedTimeMs = (timeOrTick / intervalMs) * intervalMs;
+            long baseFrame = (quantizedTimeMs * effectiveBaseFps) / 1000L;
+            return (int) ((baseFrame % frameCount + frameCount) % frameCount);
+        }
     }
 
     public float getMinV(long tick) {

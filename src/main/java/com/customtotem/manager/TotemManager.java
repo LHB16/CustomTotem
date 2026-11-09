@@ -76,6 +76,7 @@ public class TotemManager {
             int frameCount,
             int frameTime,
             int fps,
+            int baseFps,
             TotemTextureTransform transform
     ) {}
 
@@ -146,6 +147,7 @@ public class TotemManager {
                     entry.isEnabled(),
                     entry.getFrameTime(),
                     entry.getFps(),
+                    entry.getBaseFps(),
                     entry.getColumns(),
                     entry.getRows(),
                     entry.getFrameCount(),
@@ -285,6 +287,7 @@ public class TotemManager {
                         int frameCount = 1;
                         int frameTime = 2;
                         int fps = 20;
+                        int baseFps = 60;
 
                         if (configEntry != null && configEntry.columns > 0 && configEntry.rows > 0 && configEntry.frameCount > 0) {
                             cols = configEntry.columns;
@@ -295,6 +298,9 @@ public class TotemManager {
                             }
                             if (configEntry.frameTime > 0) {
                                 frameTime = configEntry.frameTime;
+                            }
+                            if (configEntry.baseFps > 0) {
+                                baseFps = configEntry.baseFps;
                             }
                         } else {
                             // Detect grid format e.g. _grid8x8_64f
@@ -315,7 +321,9 @@ public class TotemManager {
                             java.util.regex.Matcher fpsMatcher = java.util.regex.Pattern.compile("(?i)_(\\d+)fps").matcher(fileName);
                             if (fpsMatcher.find()) {
                                 try {
-                                    fps = Integer.parseInt(fpsMatcher.group(1));
+                                    int matched = Integer.parseInt(fpsMatcher.group(1));
+                                    fps = matched;
+                                    baseFps = matched;
                                 } catch (Exception ignored) {}
                             }
 
@@ -335,6 +343,10 @@ public class TotemManager {
                                         }
                                         if (obj.has("fps")) {
                                             fps = obj.get("fps").getAsInt();
+                                            baseFps = fps;
+                                        }
+                                        if (obj.has("baseFps")) {
+                                            baseFps = obj.get("baseFps").getAsInt();
                                         }
                                     }
                                 } catch (Exception ignored) {}
@@ -347,6 +359,10 @@ public class TotemManager {
                                     cols = 1;
                                 }
                             }
+                        }
+
+                        if (frameCount >= 45 && baseFps < 60) {
+                            baseFps = 60;
                         }
 
                         if (displayName.equals(fileName)) {
@@ -368,7 +384,7 @@ public class TotemManager {
 
                         preloadedList.add(new PreloadedTotem(
                                 file, image, width, height, uniqueId, fileName, displayName,
-                                enabled, cols, rows, frameCount, frameTime, fps, transform
+                                enabled, cols, rows, frameCount, frameTime, fps, baseFps, transform
                         ));
                     } catch (Exception e) {
                         LOGGER.error("Failed to decode totem image file: {}", file, e);
@@ -397,6 +413,7 @@ public class TotemManager {
                                 }
 
                                 TotemEntry entry = new TotemEntry(p.uniqueId, p.fileName, p.displayName, p.enabled, p.width, p.height, p.cols, p.rows, p.frameCount);
+                                entry.setBaseFps(p.baseFps);
                                 if (p.fps > 0) {
                                     entry.setFps(p.fps);
                                 } else if (p.frameTime > 0) {
@@ -567,6 +584,7 @@ public class TotemManager {
             int rows = 1;
             int frameCount = 1;
             int fps = 20;
+            int baseFps = (configEntry != null && configEntry.baseFps > 0) ? configEntry.baseFps : 60;
 
             if (configEntry != null && configEntry.columns > 0 && configEntry.rows > 0 && configEntry.frameCount > 0) {
                 cols = configEntry.columns;
@@ -592,7 +610,9 @@ public class TotemManager {
                 java.util.regex.Matcher fpsMatcher = java.util.regex.Pattern.compile("(?i)_(\\d+)fps").matcher(fileName);
                 if (fpsMatcher.find()) {
                     try {
-                        fps = Integer.parseInt(fpsMatcher.group(1));
+                        int matched = Integer.parseInt(fpsMatcher.group(1));
+                        fps = matched;
+                        baseFps = matched;
                     } catch (Exception ignored) {}
                 }
 
@@ -612,6 +632,10 @@ public class TotemManager {
                             }
                             if (obj.has("fps")) {
                                 fps = obj.get("fps").getAsInt();
+                                baseFps = fps;
+                            }
+                            if (obj.has("baseFps")) {
+                                baseFps = obj.get("baseFps").getAsInt();
                             }
                         }
                     } catch (Exception ignored) {}
@@ -626,6 +650,10 @@ public class TotemManager {
                 }
             }
 
+            if (frameCount >= 45 && baseFps < 60) {
+                baseFps = 60;
+            }
+
             if (displayName.equals(fileName)) {
                 String clean = displayName.replace(".png", "")
                         .replaceAll("(?i)_grid\\d+x\\d+(?:_\\d+f)?", "")
@@ -637,6 +665,7 @@ public class TotemManager {
             }
 
             TotemEntry entry = new TotemEntry(uniqueId, fileName, displayName, enabled, width, height, cols, rows, frameCount);
+            entry.setBaseFps(baseFps);
             if (fps > 0) {
                 entry.setFps(fps);
             } else if (configEntry != null && configEntry.frameTime > 0) {
