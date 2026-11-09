@@ -4,6 +4,7 @@ import com.customtotem.manager.TotemManager;
 import com.customtotem.model.TotemEntry;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.Selectable;
@@ -22,6 +23,22 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
         super(client, width, height, y, itemHeight);
         this.screen = screen;
         refreshEntries();
+    }
+
+    public void scroll(double amount) {
+        setScrollY(getScrollY() + amount);
+    }
+
+    @Override
+    public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+        if (super.mouseDragged(click, deltaX, deltaY)) {
+            return true;
+        }
+        if (overflows()) {
+            setScrollY(getScrollY() - deltaY);
+            return true;
+        }
+        return false;
     }
 
     public void refreshEntries() {
@@ -139,18 +156,21 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             // Draw Thumbnail: (texture, x1, y1, x2, y2, u0, u1, v0, v1)
             if (entry.getTextureId() != null) {
-                long tick = TotemManager.getInstance().getClientTicks();
-                float[] uvs = entry.getRenderUVs(tick);
-                float[] bounds = entry.getQuadBounds();
-                float boxSize = 24.0f;
-                int qx1 = (int) (x + 2 + bounds[0] * boxSize);
-                int qx2 = (int) (x + 2 + bounds[1] * boxSize);
-                int qy1 = (int) (y + 2 + (1.0f - bounds[3]) * boxSize);
-                int qy2 = (int) (y + 2 + (1.0f - bounds[2]) * boxSize);
+                TotemManager.getInstance().ensureTextureRegistered(entry);
+                if (MinecraftClient.getInstance().getTextureManager().getTexture(entry.getTextureId()) != null) {
+                    long tick = TotemManager.getInstance().getClientTicks();
+                    float[] uvs = entry.getRenderUVs(tick);
+                    float[] bounds = entry.getQuadBounds();
+                    float boxSize = 24.0f;
+                    int qx1 = (int) (x + 2 + bounds[0] * boxSize);
+                    int qx2 = (int) (x + 2 + bounds[1] * boxSize);
+                    int qy1 = (int) (y + 2 + (1.0f - bounds[3]) * boxSize);
+                    int qy2 = (int) (y + 2 + (1.0f - bounds[2]) * boxSize);
 
-                context.enableScissor(x + 2, y + 2, x + 26, y + 26);
-                context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, uvs[0], uvs[1], uvs[2], uvs[3]);
-                context.disableScissor();
+                    context.enableScissor(x + 2, y + 2, x + 26, y + 26);
+                    context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, uvs[0], uvs[1], uvs[2], uvs[3]);
+                    context.disableScissor();
+                }
             }
 
             // Text info

@@ -31,6 +31,11 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
             return;
         }
 
+        TotemManager.getInstance().ensureTextureRegistered(entry);
+        if (net.minecraft.client.MinecraftClient.getInstance().getTextureManager().getTexture(entry.getTextureId()) == null) {
+            return;
+        }
+
         long tick = TotemManager.getInstance().getClientTicks();
         float[] uvs = entry.getRenderUVs(tick);
         final float u0 = uvs[0];

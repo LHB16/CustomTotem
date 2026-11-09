@@ -2,6 +2,7 @@ package com.customtotem.gui;
 
 import com.customtotem.manager.TotemManager;
 import com.customtotem.model.TotemEntry;
+import com.customtotem.util.PlatformUtil;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
@@ -41,7 +42,7 @@ public class FolderBrowserScreen extends Screen {
     private long statusExpireTime = 0;
 
     public FolderBrowserScreen(Screen parent) {
-        super(Text.literal("Totem Images Folder Browser"));
+        super(Text.literal("Trình Duyệt Tệp & Thư Mục Totem"));
         this.parent = parent;
         Path initial = TotemManager.getInstance().getImagesDir();
         if (initial != null && Files.exists(initial)) {
@@ -53,13 +54,11 @@ public class FolderBrowserScreen extends Screen {
 
     @Override
     protected void init() {
-        int centerX = this.width / 2;
-
         // --- Row 1: Quick Shortcuts (Y = 22) ---
         List<Shortcut> shortcuts = getShortcuts();
         int scCount = shortcuts.size();
         int scSpacing = 4;
-        int scBtnWidth = Math.min(105, (this.width - 20 - (scSpacing * (scCount - 1))) / scCount);
+        int scBtnWidth = Math.min(95, (this.width - 20 - (scSpacing * (scCount - 1))) / scCount);
         int totalScWidth = (scBtnWidth * scCount) + (scSpacing * (scCount - 1));
         int scStartX = (this.width - totalScWidth) / 2;
 
@@ -107,23 +106,37 @@ public class FolderBrowserScreen extends Screen {
         // --- Row 3: File / Folder List (Y = 70 to height - 56) ---
         int listY = 70;
         int listHeight = Math.max(40, this.height - listY - 56);
-        this.fileListWidget = new FileListWidget(this.client, this.width, listHeight, listY, 26, this);
+        this.fileListWidget = new FileListWidget(this.client, this.width - 34, listHeight, listY, 26, this);
+        this.fileListWidget.setX(10);
         this.addDrawableChild(fileListWidget);
 
+        // Scroll helper buttons on the right side
+        int scrollBtnX = this.width - 24;
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("▲"),
+                btn -> fileListWidget.scroll(-80)
+        ).dimensions(scrollBtnX, listY + 4, 18, 22).build());
+
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("▼"),
+                btn -> fileListWidget.scroll(80)
+        ).dimensions(scrollBtnX, listY + listHeight - 26, 18, 22).build());
+
         // --- Row 4: Bottom Action Buttons (Y = height - 26) ---
-        int btnWidth = 110;
-        int btnSpacing = 6;
-        int totalBottomWidth = (btnWidth * 4) + (btnSpacing * 3);
+        int btnWidth = 100;
+        int btnSpacing = 5;
+        int btnCount = 5;
+        int totalBottomWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
         if (totalBottomWidth > this.width - 10) {
-            btnWidth = (this.width - 20 - (btnSpacing * 3)) / 4;
-            totalBottomWidth = (btnWidth * 4) + (btnSpacing * 3);
+            btnWidth = (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount;
+            totalBottomWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
         }
         int bStartX = (this.width - totalBottomWidth) / 2;
         int bY = this.height - 26;
 
         // Button 1: Set as Totem Folder
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("✔ Set As Folder"),
+                Text.literal("✔ Dùng Thư Mục"),
                 btn -> {
                     TotemManager.getInstance().setCustomImagesDir(this.currentDirectory);
                     if (this.parent instanceof TotemManagerScreen tms) {
@@ -133,9 +146,19 @@ public class FolderBrowserScreen extends Screen {
                 }
         ).dimensions(bStartX, bY, btnWidth, 20).build());
 
-        // Button 2: Reset to Mod Default Folder
+        // Button 2: Open Mobile Gallery Web
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Reset Default"),
+                Text.literal("📱 Thư Viện"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new WebGalleryScreen(this));
+                    }
+                }
+        ).dimensions(bStartX + (btnWidth + btnSpacing), bY, btnWidth, 20).build());
+
+        // Button 3: Reset to Mod Default Folder
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("Mặc Định"),
                 btn -> {
                     TotemManager.getInstance().setCustomImagesDir(null);
                     if (this.parent instanceof TotemManagerScreen tms) {
@@ -143,19 +166,27 @@ public class FolderBrowserScreen extends Screen {
                     }
                     this.close();
                 }
-        ).dimensions(bStartX + (btnWidth + btnSpacing), bY, btnWidth, 20).build());
-
-        // Button 3: Native PC File Picker (Desktop only)
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("PC Picker"),
-                btn -> openDesktopFileDialog()
         ).dimensions(bStartX + (btnWidth + btnSpacing) * 2, bY, btnWidth, 20).build());
 
-        // Button 4: Back / Close
+        // Button 4: Native PC File Picker (Desktop only)
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Back"),
-                btn -> this.close()
+                Text.literal(PlatformUtil.isAndroid() ? "Quét Lại" : "PC Picker"),
+                btn -> {
+                    if (PlatformUtil.isAndroid()) {
+                        TotemManager.getInstance().rescanImages();
+                        if (fileListWidget != null) fileListWidget.refresh();
+                        setStatus("§aĐã quét lại thư mục!", false);
+                    } else {
+                        openDesktopFileDialog();
+                    }
+                }
         ).dimensions(bStartX + (btnWidth + btnSpacing) * 3, bY, btnWidth, 20).build());
+
+        // Button 5: Back / Close
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("Quay Lại"),
+                btn -> this.close()
+        ).dimensions(bStartX + (btnWidth + btnSpacing) * 4, bY, btnWidth, 20).build());
     }
 
     public void navigateTo(Path dir) {
@@ -167,13 +198,14 @@ public class FolderBrowserScreen extends Screen {
                     this.pathField.setText(this.currentDirectory.toString());
                 }
                 if (this.fileListWidget != null) {
+                    this.fileListWidget.setScrollY(0);
                     this.fileListWidget.refresh();
                 }
             } else {
-                setStatus("§cDirectory does not exist: " + dir, true);
+                setStatus("§cThư mục không tồn tại: " + dir, true);
             }
         } catch (Exception e) {
-            setStatus("§cCannot access: " + e.getMessage(), true);
+            setStatus("§cLỗi truy cập: " + e.getMessage(), true);
         }
     }
 
@@ -183,7 +215,7 @@ public class FolderBrowserScreen extends Screen {
             Path p = Path.of(pathStr.trim());
             navigateTo(p);
         } catch (Exception e) {
-            setStatus("§cInvalid path syntax: " + e.getMessage(), true);
+            setStatus("§cĐường dẫn không hợp lệ: " + e.getMessage(), true);
         }
     }
 
@@ -200,15 +232,15 @@ public class FolderBrowserScreen extends Screen {
         try {
             TotemEntry entry = TotemManager.getInstance().addTotem(file);
             if (entry != null) {
-                setStatus("§a✓ Added: " + file.getFileName().toString(), false);
+                setStatus("§a✓ Đã thêm Totem: " + file.getFileName().toString(), false);
                 if (this.parent instanceof TotemManagerScreen tms) {
                     tms.refreshList();
                 }
             } else {
-                setStatus("§c✗ Failed to load: " + file.getFileName().toString(), true);
+                setStatus("§c✗ Không thể nạp: " + file.getFileName().toString(), true);
             }
         } catch (Exception e) {
-            setStatus("§c✗ Error adding image: " + e.getMessage(), true);
+            setStatus("§cLỗi thêm ảnh: " + e.getMessage(), true);
         }
     }
 
@@ -219,6 +251,13 @@ public class FolderBrowserScreen extends Screen {
     }
 
     private void openDesktopFileDialog() {
+        if (PlatformUtil.isAndroid()) {
+            if (this.client != null) {
+                this.client.setScreen(new WebGalleryScreen(this));
+            }
+            return;
+        }
+
         CompletableFuture.supplyAsync(() -> {
             try {
                 return TinyFileDialogs.tinyfd_openFileDialog(
@@ -229,7 +268,6 @@ public class FolderBrowserScreen extends Screen {
                         false
                 );
             } catch (Throwable t) {
-                LOGGER.warn("TinyFileDialogs failed (expected on mobile): {}", t.getMessage());
                 return null;
             }
         }).thenAccept(filePath -> {
@@ -275,13 +313,13 @@ public class FolderBrowserScreen extends Screen {
             context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(statusMessage), this.width / 2, this.height - 42, statusColor);
         } else {
             Path active = TotemManager.getInstance().getImagesDir();
-            String activeStr = active != null ? active.toString() : "Default";
-            if (this.textRenderer.getWidth("Active: " + activeStr) > this.width - 20) {
+            String activeStr = active != null ? active.toString() : "Mặc định";
+            if (this.textRenderer.getWidth("Nguồn ảnh: " + activeStr) > this.width - 20) {
                 activeStr = "..." + activeStr.substring(Math.max(0, activeStr.length() - 40));
             }
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§7Active Folder: §e" + activeStr),
+                    Text.literal("§7Nguồn ảnh hiện tại: §e" + activeStr),
                     this.width / 2,
                     this.height - 42,
                     0xAAAAAA
@@ -297,30 +335,39 @@ public class FolderBrowserScreen extends Screen {
         List<Shortcut> list = new ArrayList<>();
 
         // 1. Mod Default
-        list.add(new Shortcut("📁 Mod Default", TotemManager.getInstance().getDefaultImagesDir()));
+        list.add(new Shortcut("📁 Mod", TotemManager.getInstance().getDefaultImagesDir()));
 
-        // 2. Android / PC Downloads
+        // 2. Android DCIM (Camera)
+        Path dcim = resolveFirstExisting(
+                Path.of("/storage/emulated/0/DCIM"),
+                Path.of("/sdcard/DCIM")
+        );
+        if (dcim != null) {
+            list.add(new Shortcut("📸 DCIM", dcim));
+        }
+
+        // 3. Android / PC Downloads
         Path dl = resolveFirstExisting(
                 Path.of("/storage/emulated/0/Download"),
                 Path.of("/sdcard/Download"),
                 Path.of(System.getProperty("user.home", ""), "Downloads")
         );
         if (dl != null) {
-            list.add(new Shortcut("📥 Downloads", dl));
+            list.add(new Shortcut("📥 Tải Về", dl));
         }
 
-        // 3. Android / PC Pictures
+        // 4. Android / PC Pictures
         Path pic = resolveFirstExisting(
                 Path.of("/storage/emulated/0/Pictures"),
                 Path.of("/sdcard/Pictures"),
                 Path.of(System.getProperty("user.home", ""), "Pictures")
         );
         if (pic != null) {
-            list.add(new Shortcut("🖼 Pictures", pic));
+            list.add(new Shortcut("🖼 Ảnh", pic));
         }
 
-        // 4. Game Root
-        list.add(new Shortcut("🎮 Game Dir", FabricLoader.getInstance().getGameDir()));
+        // 5. Game Root
+        list.add(new Shortcut("🎮 Game", FabricLoader.getInstance().getGameDir()));
 
         return list;
     }
@@ -339,7 +386,7 @@ public class FolderBrowserScreen extends Screen {
     private record Shortcut(String name, Path path) {}
 
     // =========================================================================
-    // File List Widget
+    // File List Widget with Touch Drag Scrolling
     // =========================================================================
     public static class FileListWidget extends ElementListWidget<FileListWidget.FileItemWidget> {
         private final FolderBrowserScreen screen;
@@ -348,6 +395,22 @@ public class FolderBrowserScreen extends Screen {
             super(client, width, height, y, itemHeight);
             this.screen = screen;
             refresh();
+        }
+
+        public void scroll(double amount) {
+            setScrollY(getScrollY() + amount);
+        }
+
+        @Override
+        public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+            if (super.mouseDragged(click, deltaX, deltaY)) {
+                return true;
+            }
+            if (overflows()) {
+                setScrollY(getScrollY() - deltaY);
+                return true;
+            }
+            return false;
         }
 
         public void refresh() {
@@ -360,7 +423,7 @@ public class FolderBrowserScreen extends Screen {
             // Up entry if has parent
             Path parent = current.getParent();
             if (parent != null && Files.exists(parent)) {
-                this.addEntry(new FileItemWidget(parent, ".. [Parent Folder]", true, true));
+                this.addEntry(new FileItemWidget(parent, ".. [Thư Mục Cha]", true, true));
             }
 
             List<Path> subDirs = new ArrayList<>();
@@ -369,9 +432,13 @@ public class FolderBrowserScreen extends Screen {
             try (Stream<Path> stream = Files.list(current)) {
                 stream.forEach(p -> {
                     try {
+                        String name = p.getFileName().toString();
+                        if (name.startsWith(".") || name.startsWith(".trashed")) {
+                            return; // Ignore hidden or trash files!
+                        }
                         if (Files.isDirectory(p) && !Files.isHidden(p)) {
                             subDirs.add(p);
-                        } else if (p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png")) {
+                        } else if (name.toLowerCase(Locale.ROOT).endsWith(".png")) {
                             pngFiles.add(p);
                         }
                     } catch (Exception ignored) {}
@@ -393,7 +460,7 @@ public class FolderBrowserScreen extends Screen {
 
         @Override
         public int getRowWidth() {
-            return Math.min(this.width - 20, 520);
+            return Math.min(this.width - 10, 520);
         }
 
         public class FileItemWidget extends ElementListWidget.Entry<FileItemWidget> {
@@ -412,12 +479,12 @@ public class FolderBrowserScreen extends Screen {
 
                 if (isParent) {
                     this.actionButton = ButtonWidget.builder(
-                            Text.literal("▲ Up"),
+                            Text.literal("▲ Lên"),
                             btn -> screen.navigateUp()
                     ).dimensions(0, 0, 48, 20).build();
                 } else if (isDirectory) {
                     this.actionButton = ButtonWidget.builder(
-                            Text.literal("Open"),
+                            Text.literal("Mở"),
                             btn -> screen.navigateTo(path)
                     ).dimensions(0, 0, 48, 20).build();
                 } else {
@@ -442,24 +509,25 @@ public class FolderBrowserScreen extends Screen {
                     context.fill(x - 2, y, x + width + 2, y + height, 0x25FFFFFF);
                 }
 
-                // Render Icon & Label
-                String label;
-                int color;
+                // Render Clean Label without non-standard Unicode emojis to prevent text dropout
+                String prefix;
+                int prefixColor;
                 if (isParent) {
-                    label = "📁 .. [Parent Folder]";
-                    color = 0xFFAA00;
+                    prefix = "§6[UP] ";
+                    prefixColor = 0xFFAA00;
                 } else if (isDirectory) {
-                    label = "📁 " + displayName + "/";
-                    color = 0xFFFF55;
+                    prefix = "§e[DIR] ";
+                    prefixColor = 0xFFFF55;
                 } else {
-                    label = "🖼 " + displayName;
-                    color = 0x55FFFF;
+                    prefix = "§b[IMG] ";
+                    prefixColor = 0x55FFFF;
                 }
 
-                if (textRenderer.getWidth(label) > width - 65) {
-                    label = textRenderer.trimToWidth(label, width - 75) + "...";
+                String label = prefix + displayName + (isDirectory && !isParent ? "/" : "");
+                if (textRenderer.getWidth(label) > width - 58) {
+                    label = textRenderer.trimToWidth(label, width - 68) + "...";
                 }
-                context.drawTextWithShadow(textRenderer, Text.literal(label), x + 4, y + 6, color);
+                context.drawTextWithShadow(textRenderer, Text.literal(label), x + 4, y + 6, prefixColor);
 
                 // Render Action Button
                 actionButton.setX(x + width - 50);
@@ -469,20 +537,8 @@ public class FolderBrowserScreen extends Screen {
 
             @Override
             public boolean mouseClicked(Click click, boolean focused) {
-                if (actionButton.mouseClicked(click, focused)) {
-                    return true;
-                }
-                // Also allow clicking anywhere on row to open or add
-                if (isParent) {
-                    screen.navigateUp();
-                    return true;
-                } else if (isDirectory) {
-                    screen.navigateTo(path);
-                    return true;
-                } else {
-                    screen.importImage(path);
-                    return true;
-                }
+                // Only button clicks trigger actions; row clicking does not, allowing smooth touch drag scrolling!
+                return actionButton.mouseClicked(click, focused);
             }
 
             @Override

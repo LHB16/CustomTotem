@@ -127,8 +127,13 @@ public class TotemManager {
 
     public synchronized void reloadAllTextures(TotemConfig loadedConfig) {
         MinecraftClient client = MinecraftClient.getInstance();
+        if (client != null && !client.isOnThread()) {
+            client.execute(() -> reloadAllTextures(loadedConfig));
+            return;
+        }
+
         for (TotemEntry entry : entries) {
-            if (entry.getTextureId() != null) {
+            if (entry.getTextureId() != null && client != null && client.getTextureManager() != null) {
                 client.getTextureManager().destroyTexture(entry.getTextureId());
             }
             entry.close();
@@ -155,8 +160,13 @@ public class TotemManager {
         }
 
         try (Stream<Path> stream = Files.list(activeDir)) {
-            stream.filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png"))
-                  .forEach(imageFiles::add);
+            stream.filter(p -> {
+                String name = p.getFileName().toString();
+                if (name.startsWith(".") || name.startsWith(".trashed")) {
+                    return false;
+                }
+                return name.toLowerCase(Locale.ROOT).endsWith(".png");
+            }).forEach(imageFiles::add);
         } catch (Exception e) {
             LOGGER.error("Failed to list totem images from {}", activeDir, e);
         }
@@ -196,10 +206,41 @@ public class TotemManager {
         saveConfig();
     }
 
+    public synchronized void ensureTextureRegistered(TotemEntry entry) {
+        if (entry == null || entry.getTextureId() == null) return;
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.getTextureManager() == null) return;
+
+        if (client.getTextureManager().getTexture(entry.getTextureId()) == null) {
+            Path file = getImagesDir().resolve(entry.getFileName());
+            if (Files.exists(file)) {
+                try (InputStream in = Files.newInputStream(file)) {
+                    NativeImage image = NativeImage.read(in);
+                    NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), image);
+                    client.getTextureManager().registerTexture(entry.getTextureId(), texture);
+                    entry.setTexture(texture);
+                } catch (Exception e) {
+                    LOGGER.error("Failed to restore texture for entry: {}", entry.getFileName(), e);
+                }
+            }
+        }
+    }
+
     private TotemEntry loadSingleImage(Path file, TotemConfig.TotemEntryConfig configEntry) {
         String fileName = file.getFileName().toString();
-        String idName = fileName.replace(".png", "").replaceAll("[^a-zA-Z0-9_.-]", "_").toLowerCase(Locale.ROOT);
-        String uniqueId = (configEntry != null && configEntry.id != null) ? configEntry.id : idName + "_" + System.currentTimeMillis();
+        if (fileName.startsWith(".") || fileName.startsWith(".trashed")) {
+            return null;
+        }
+
+        String idName = fileName.replace(".png", "")
+                .replaceAll("[^a-zA-Z0-9_-]", "_")
+                .replaceAll("^_+", "")
+                .toLowerCase(Locale.ROOT);
+        if (idName.isEmpty()) idName = "totem";
+
+        String uniqueId = (configEntry != null && configEntry.id != null)
+                ? configEntry.id.replaceAll("[^a-zA-Z0-9_-]", "_").replaceAll("^_+", "").toLowerCase(Locale.ROOT)
+                : idName + "_" + System.currentTimeMillis();
 
         try (InputStream in = Files.newInputStream(file)) {
             NativeImage image = NativeImage.read(in);
@@ -208,7 +249,10 @@ public class TotemManager {
 
             Identifier textureId = Identifier.of("customtotem", "textures/" + uniqueId);
             NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + uniqueId, image);
-            MinecraftClient.getInstance().getTextureManager().registerTexture(textureId, texture);
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client != null && client.getTextureManager() != null) {
+                client.getTextureManager().registerTexture(textureId, texture);
+            }
 
             boolean enabled = configEntry == null || configEntry.enabled;
             String displayName = configEntry != null && configEntry.displayName != null ? configEntry.displayName : fileName;

@@ -35,7 +35,7 @@ public class TotemManagerScreen extends Screen {
 
         // Button 1: Folder Browser
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📁 Folder"),
+                Text.literal("📁 Thư Mục"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new FolderBrowserScreen(this));
@@ -43,26 +43,36 @@ public class TotemManagerScreen extends Screen {
                 }
         ).dimensions(startX, topBarY, btnWidth, 20).build());
 
-        // Button 2: Rescan current folder
+        // Button 2: Mobile Photo Gallery Web Uploader
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🔄 Rescan"),
+                Text.literal("📱 Thư Viện"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new WebGalleryScreen(this));
+                    }
+                }
+        ).dimensions(startX + (btnWidth + btnSpacing), topBarY, btnWidth, 20).build());
+
+        // Button 3: Rescan current folder
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("🔄 Quét Lại"),
                 btn -> {
                     TotemManager.getInstance().rescanImages();
                     refreshList();
                 }
-        ).dimensions(startX + (btnWidth + btnSpacing), topBarY, btnWidth, 20).build());
+        ).dimensions(startX + (btnWidth + btnSpacing) * 2, topBarY, btnWidth, 20).build());
 
-        // Button 3: Switch Totem Pop Mode (SINGLE / SEQUENTIAL / RANDOM)
+        // Button 4: Switch Totem Pop Mode (SINGLE / SEQUENTIAL / RANDOM)
         modeButton = ButtonWidget.builder(
                 getModeButtonText(),
                 btn -> {
                     TotemManager.getInstance().setMode(TotemManager.getInstance().getMode().next());
                     btn.setMessage(getModeButtonText());
                 }
-        ).dimensions(startX + (btnWidth + btnSpacing) * 2, topBarY, btnWidth, 20).build();
+        ).dimensions(startX + (btnWidth + btnSpacing) * 3, topBarY, btnWidth, 20).build();
         this.addDrawableChild(modeButton);
 
-        // Button 4: Display Settings (Model / Mini Totem)
+        // Button 5: Display Settings (Model / Mini Totem)
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("⚙ Display"),
                 btn -> {
@@ -70,19 +80,26 @@ public class TotemManagerScreen extends Screen {
                         this.client.setScreen(new DisplaySettingsScreen(this));
                     }
                 }
-        ).dimensions(startX + (btnWidth + btnSpacing) * 3, topBarY, btnWidth, 20).build());
-
-        // Button 5: Upload Image (using TinyFileDialogs on PC with fallback to FolderBrowser)
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("+ Add Image"),
-                btn -> openFileDialog()
         ).dimensions(startX + (btnWidth + btnSpacing) * 4, topBarY, btnWidth, 20).build());
 
         // Center List Widget
         int listY = 62;
         int listHeight = this.height - listY - 38;
-        this.listWidget = new TotemListWidget(this.client, this.width, listHeight, listY, 32, this);
+        this.listWidget = new TotemListWidget(this.client, this.width - 34, listHeight, listY, 32, this);
+        this.listWidget.setX(10);
         this.addDrawableChild(listWidget);
+
+        // Scroll helper buttons on the right side
+        int scrollBtnX = this.width - 24;
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("▲"),
+                btn -> listWidget.scroll(-96)
+        ).dimensions(scrollBtnX, listY + 4, 18, 22).build());
+
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("▼"),
+                btn -> listWidget.scroll(96)
+        ).dimensions(scrollBtnX, listY + listHeight - 26, 18, 22).build());
 
         // Done button
         this.addDrawableChild(ButtonWidget.builder(
@@ -102,6 +119,13 @@ public class TotemManagerScreen extends Screen {
     }
 
     private void openFileDialog() {
+        if (com.customtotem.util.PlatformUtil.isAndroid()) {
+            if (this.client != null) {
+                this.client.setScreen(new WebGalleryScreen(this));
+            }
+            return;
+        }
+
         CompletableFuture.supplyAsync(() -> {
             try {
                 return TinyFileDialogs.tinyfd_openFileDialog(
