@@ -89,3 +89,31 @@ fn test_load_image_sequence_folder() {
 
     let _ = fs::remove_dir_all(&test_dir);
 }
+
+#[test]
+fn test_grid_spritesheet_170_frames() {
+    use totem_converter::converter::{calculate_optimal_grid, build_output_spritesheet, FrameData, SpritesheetLayout};
+
+    let (cols, rows) = calculate_optimal_grid(170);
+    assert_eq!(cols, 14);
+    assert_eq!(rows, 13);
+    assert!(cols * rows >= 170);
+
+    let target_size = 128;
+    let mut frames = Vec::new();
+    for _ in 0..170 {
+        frames.push(FrameData {
+            image: RgbaImage::from_pixel(target_size, target_size, Rgba([255, 215, 0, 255])),
+            delay_ms: 66,
+        });
+    }
+
+    let (sheet, c, r) = build_output_spritesheet(&frames, target_size, SpritesheetLayout::Grid).unwrap();
+    assert_eq!(c, 14);
+    assert_eq!(r, 13);
+    let (w, h) = sheet.dimensions();
+    assert_eq!(w, 14 * 128); // 1792
+    assert_eq!(h, 13 * 128); // 1664
+    assert!(w <= 16384);
+    assert!(h <= 16384);
+}

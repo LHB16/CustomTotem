@@ -183,6 +183,9 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             String info = entry.getWidth() + "x" + entry.getHeight();
             if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
                 info += " (" + entry.getFrameCount() + "f)";
+                if (entry.getColumns() > 1) {
+                    info += " §b[" + entry.getColumns() + "x" + entry.getRows() + " Grid]";
+                }
             }
             if (entry.getTransform().getScale() != 1.0f || entry.getTransform().getOffsetX() != 0.0f || entry.getTransform().getOffsetY() != 0.0f) {
                 info += " §e[Custom]";

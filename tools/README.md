@@ -9,6 +9,7 @@
 * **Sắp xếp tự nhiên (Natural Sort):** Tự động nhận diện và ghép các file ảnh trong thư mục theo đúng thứ tự thời gian chữ và số.
 * **Kéo thả trực tiếp:** Kéo thả video, GIF hoặc cả thư mục ảnh vào cửa sổ app.
 * **Trình xem trước (Preview Animation):** Chạy hiệu ứng động vòng lặp trực tiếp với tốc độ mượt mà.
+* **Bố cục Spritesheet linh hoạt:** Hỗ trợ cả **Dọc 1 cột** truyền thống và **Lưới 2D (Grid Atlas)** tự động tối ưu hóa khi số frame lớn (ví dụ 170+ frames), giữ nguyên chất lượng HD/Ultra HD 128x128 hoặc 256x256 mà không lo vượt giới hạn OpenGL của Minecraft.
 * **Tùy chỉnh linh hoạt:**
   * Kích thước mỗi frame: 32x32, 64x64, 128x128, 256x256, 512x512, 1024x1024.
   * Tốc độ khung hình (FPS): 10, 15, 20.

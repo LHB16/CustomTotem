@@ -1,4 +1,4 @@
-use crate::converter::{self, CropMode, FrameData};
+use crate::converter::{self, CropMode, FrameData, SpritesheetLayout};
 use eframe::egui::{self, Color32, ColorImage, RichText, TextureHandle, TextureOptions, Ui, Vec2};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -15,6 +15,7 @@ pub struct TotemApp {
     fps: u32,
     target_size: u32,
     crop_mode: CropMode,
+    layout: SpritesheetLayout,
 
     frames: Vec<FrameData>,
     current_frame_idx: usize,
@@ -41,6 +42,7 @@ impl Default for TotemApp {
             fps: 15,
             target_size: 128,
             crop_mode: CropMode::CenterCrop,
+            layout: SpritesheetLayout::Auto,
 
             frames: Vec::new(),
             current_frame_idx: 0,
@@ -245,18 +247,47 @@ impl TotemApp {
             return;
         }
 
-        match converter::build_spritesheet(&self.frames, self.target_size) {
-            Ok(sheet) => {
+        match converter::build_output_spritesheet(&self.frames, self.target_size, self.layout) {
+            Ok((sheet, cols, rows)) => {
                 let (w, h) = sheet.dimensions();
-                match sheet.save(&target_path) {
+                let frame_count = self.frames.len();
+
+                // If grid layout and filename does not yet have grid info, append _gridWxH_Nf
+                let final_path = if cols > 1 && !target_path.to_string_lossy().contains("_grid") {
+                    let file_stem = target_path.file_stem().unwrap_or_default().to_string_lossy();
+                    let ext = target_path.extension().unwrap_or_default().to_string_lossy();
+                    let new_name = format!("{}_grid{}x{}_{}f.{}", file_stem, cols, rows, frame_count, ext);
+                    target_path.with_file_name(new_name)
+                } else {
+                    target_path
+                };
+
+                match sheet.save(&final_path) {
                     Ok(()) => {
+                        // Also write companion sidecar JSON metadata if grid
+                        if cols > 1 {
+                            let json_path = final_path.with_extension("json");
+                            let meta_content = format!(
+                                "{{\n  \"columns\": {},\n  \"rows\": {},\n  \"frameCount\": {}\n}}\n",
+                                cols, rows, frame_count
+                            );
+                            let _ = std::fs::write(&json_path, meta_content);
+                        }
+
+                        let layout_desc = if cols > 1 {
+                            format!("Lưới 2D {}x{} ô", cols, rows)
+                        } else {
+                            "Dọc 1 cột".to_string()
+                        };
+
                         self.status_message = Some((
                             format!(
-                                "Xuất thành công: {} (Kích thước: {}x{} px, {} frames)!",
-                                target_path.display(),
+                                "Xuất thành công: {} ({}x{} px, {} frames, {})!",
+                                final_path.display(),
                                 w,
                                 h,
-                                self.frames.len()
+                                frame_count,
+                                layout_desc
                             ),
                             false,
                         ));
@@ -289,7 +320,21 @@ impl TotemApp {
 
         if let Some(dir) = target_dir {
             let clean_name = self.totem_name.replace(' ', "_").to_lowercase();
-            let file_path = dir.join(format!("{}.png", clean_name));
+            let frame_count = self.frames.len() as u32;
+            let use_grid = match self.layout {
+                SpritesheetLayout::Grid => true,
+                SpritesheetLayout::Vertical => false,
+                SpritesheetLayout::Auto => (frame_count * self.target_size) > 8192,
+            };
+
+            let file_name = if use_grid {
+                let (cols, rows) = converter::calculate_optimal_grid(frame_count);
+                format!("{}_grid{}x{}_{}f.png", clean_name, cols, rows, frame_count)
+            } else {
+                format!("{}.png", clean_name)
+            };
+
+            let file_path = dir.join(file_name);
             self.export_png(file_path);
         } else {
             self.status_message = Some((
@@ -524,6 +569,19 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
                         }
                     });
             });
+            ui.add_space(6.0);
+
+            // Spritesheet Layout
+            ui.horizontal(|ui| {
+                ui.label("Bố cục ảnh:");
+                egui::ComboBox::from_id_salt("layout_mode_combo")
+                    .selected_text(app.layout.label())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut app.layout, SpritesheetLayout::Auto, SpritesheetLayout::Auto.label());
+                        ui.selectable_value(&mut app.layout, SpritesheetLayout::Grid, SpritesheetLayout::Grid.label());
+                        ui.selectable_value(&mut app.layout, SpritesheetLayout::Vertical, SpritesheetLayout::Vertical.label());
+                    });
+            });
 
             // Video Time Trimming (chỉ hiển thị khi file là video)
             if let Some(ref p) = app.input_path {
@@ -624,8 +682,27 @@ fn render_right_panel(ui: &mut Ui, app: &mut TotemApp) {
                         ));
                     });
 
-                    let total_h = app.target_size * app.frames.len() as u32;
-                    ui.label(RichText::new(format!("Kích thước xuất: {} x {} px", app.target_size, total_h)).size(12.0).color(Color32::LIGHT_GRAY));
+                    let frame_count = app.frames.len() as u32;
+                    let is_grid = match app.layout {
+                        SpritesheetLayout::Grid => true,
+                        SpritesheetLayout::Vertical => false,
+                        SpritesheetLayout::Auto => (frame_count * app.target_size) > 8192,
+                    };
+
+                    let (out_w, out_h, grid_text) = if is_grid {
+                        let (cols, rows) = converter::calculate_optimal_grid(frame_count);
+                        (app.target_size * cols, app.target_size * rows, format!("Lưới 2D: {}x{} ô ({}f)", cols, rows, frame_count))
+                    } else {
+                        (app.target_size, app.target_size * frame_count, format!("Dọc 1 cột: {}f", frame_count))
+                    };
+
+                    ui.label(RichText::new(format!("Kích thước xuất: {} x {} px ({})", out_w, out_h, grid_text)).size(12.0).color(Color32::LIGHT_GRAY));
+
+                    if out_h > 16384 || out_w > 16384 {
+                        ui.label(RichText::new("⚠ Vượt quá giới hạn OpenGL 16384px! Hãy chuyển sang 'Lưới 2D'").color(Color32::from_rgb(255, 100, 100)).size(12.0));
+                    } else {
+                        ui.label(RichText::new("✔ Kích thước an toàn tuyệt đối cho Minecraft").color(Color32::from_rgb(100, 255, 150)).size(12.0));
+                    }
                 }
             });
 
@@ -637,7 +714,20 @@ fn render_right_panel(ui: &mut Ui, app: &mut TotemApp) {
             let can_export = !app.frames.is_empty();
 
             if ui.add_enabled(can_export, egui::Button::new(RichText::new("💾 Xuất file PNG...").size(15.0).strong())).clicked() {
-                let default_name = format!("{}.png", app.totem_name.replace(' ', "_"));
+                let frame_count = app.frames.len() as u32;
+                let use_grid = match app.layout {
+                    SpritesheetLayout::Grid => true,
+                    SpritesheetLayout::Vertical => false,
+                    SpritesheetLayout::Auto => (frame_count * app.target_size) > 8192,
+                };
+
+                let default_name = if use_grid {
+                    let (cols, rows) = converter::calculate_optimal_grid(frame_count);
+                    format!("{}_grid{}x{}_{}f.png", app.totem_name.replace(' ', "_"), cols, rows, frame_count)
+                } else {
+                    format!("{}.png", app.totem_name.replace(' ', "_"))
+                };
+
                 let mut dialog = rfd::FileDialog::new()
                     .add_filter("PNG Image", &["png"])
                     .set_file_name(&default_name);

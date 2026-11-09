@@ -109,6 +109,9 @@ public class TotemManager {
                     entry.getDisplayName(),
                     entry.isEnabled(),
                     entry.getFrameTime(),
+                    entry.getColumns(),
+                    entry.getRows(),
+                    entry.getFrameCount(),
                     entry.getTransform()
             ));
         }
@@ -256,7 +259,64 @@ public class TotemManager {
 
             boolean enabled = configEntry == null || configEntry.enabled;
             String displayName = configEntry != null && configEntry.displayName != null ? configEntry.displayName : fileName;
-            TotemEntry entry = new TotemEntry(uniqueId, fileName, displayName, enabled, width, height);
+
+            int cols = 1;
+            int rows = 1;
+            int frameCount = 1;
+
+            if (configEntry != null && configEntry.columns > 0 && configEntry.rows > 0 && configEntry.frameCount > 0) {
+                cols = configEntry.columns;
+                rows = configEntry.rows;
+                frameCount = configEntry.frameCount;
+            } else {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("_grid(\\d+)x(\\d+)(?:_(\\d+)f)?(?:\\.png)?$", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(fileName);
+                if (m.find()) {
+                    try {
+                        cols = Integer.parseInt(m.group(1));
+                        rows = Integer.parseInt(m.group(2));
+                        if (m.group(3) != null) {
+                            frameCount = Integer.parseInt(m.group(3));
+                        } else {
+                            frameCount = cols * rows;
+                        }
+                    } catch (Exception ignored) {}
+                } else {
+                    Path metaFile = file.resolveSibling(fileName + ".mcmeta");
+                    if (!Files.exists(metaFile)) {
+                        String base = fileName.endsWith(".png") ? fileName.substring(0, fileName.length() - 4) : fileName;
+                        metaFile = file.resolveSibling(base + ".json");
+                    }
+                    if (Files.exists(metaFile)) {
+                        try (Reader reader = Files.newBufferedReader(metaFile)) {
+                            com.google.gson.JsonObject obj = GSON.fromJson(reader, com.google.gson.JsonObject.class);
+                            if (obj != null && obj.has("columns") && obj.has("rows")) {
+                                cols = obj.get("columns").getAsInt();
+                                rows = obj.get("rows").getAsInt();
+                                frameCount = obj.has("frameCount") ? obj.get("frameCount").getAsInt() : cols * rows;
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+
+                if (cols == 1 && rows == 1 && frameCount == 1) {
+                    if (width > 0 && height >= width && height % width == 0) {
+                        frameCount = Math.max(1, height / width);
+                        rows = frameCount;
+                        cols = 1;
+                    }
+                }
+            }
+
+            if (displayName.equals(fileName)) {
+                String clean = displayName.replace(".png", "")
+                        .replaceAll("(?i)_grid\\d+x\\d+(?:_\\d+f)?", "")
+                        .replaceAll("^_+|_+$", "");
+                if (!clean.isEmpty()) {
+                    displayName = clean;
+                }
+            }
+
+            TotemEntry entry = new TotemEntry(uniqueId, fileName, displayName, enabled, width, height, cols, rows, frameCount);
             if (configEntry != null && configEntry.frameTime > 0) {
                 entry.setFrameTime(configEntry.frameTime);
             }

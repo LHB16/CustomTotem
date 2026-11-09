@@ -14,17 +14,27 @@ public class TotemConfig {
         public String displayName;
         public boolean enabled = true;
         public int frameTime = 2;
+        public int columns = 1;
+        public int rows = 1;
+        public int frameCount = 1;
         public TotemTextureTransform transform;
 
         public TotemEntryConfig() {
         }
 
         public TotemEntryConfig(String id, String fileName, String displayName, boolean enabled, int frameTime, TotemTextureTransform transform) {
+            this(id, fileName, displayName, enabled, frameTime, 1, 1, 1, transform);
+        }
+
+        public TotemEntryConfig(String id, String fileName, String displayName, boolean enabled, int frameTime, int columns, int rows, int frameCount, TotemTextureTransform transform) {
             this.id = id;
             this.fileName = fileName;
             this.displayName = displayName;
             this.enabled = enabled;
             this.frameTime = frameTime;
+            this.columns = columns;
+            this.rows = rows;
+            this.frameCount = frameCount;
             this.transform = transform;
         }
     }

@@ -269,10 +269,10 @@ pub fn build_spritesheet(frames: &[FrameData], target_size: u32) -> Result<RgbaI
     let frame_count = frames.len() as u32;
     let sheet_height = target_size * frame_count;
 
-    // Safety limit: 32768 px max height for modern textures
-    if sheet_height > 32768 {
+    // Safety limit: 16384 px max height for OpenGL textures in Minecraft
+    if sheet_height > 16384 {
         return Err(format!(
-            "Tổng chiều cao ảnh quá lớn ({sheet_height}px, {} frames x {target_size}px). Giới hạn an toàn tối đa là 32768px. Hãy giảm số FPS hoặc rút ngắn thời gian video khi chọn độ phân giải lớn (512x512 / 1024x1024).",
+            "Tổng chiều cao ảnh ({sheet_height}px, {} frames x {target_size}px) vượt quá giới hạn OpenGL tối đa (16384px) của Minecraft! Vui lòng chọn chế độ 'Lưới 2D' để giữ nguyên chất lượng nét cao.",
             frames.len()
         ));
     }
@@ -285,6 +285,97 @@ pub fn build_spritesheet(frames: &[FrameData], target_size: u32) -> Result<RgbaI
     }
 
     Ok(sheet)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpritesheetLayout {
+    Auto,
+    Grid,
+    Vertical,
+}
+
+impl SpritesheetLayout {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SpritesheetLayout::Auto => "Tự động (Lưới 2D nếu nhiều frame, Dọc nếu ít)",
+            SpritesheetLayout::Grid => "Lưới 2D (Grid Atlas - Khuyên dùng cho > 60 frames)",
+            SpritesheetLayout::Vertical => "Dọc 1 cột (Truyền thống)",
+        }
+    }
+}
+
+pub fn calculate_optimal_grid(frame_count: u32) -> (u32, u32) {
+    if frame_count <= 1 {
+        return (1, 1);
+    }
+    let sqrt = (frame_count as f32).sqrt().ceil() as u32;
+    let cols = sqrt.max(1);
+    let rows = (frame_count + cols - 1) / cols;
+    (cols, rows)
+}
+
+pub fn build_grid_spritesheet(
+    frames: &[FrameData],
+    target_size: u32,
+    cols: u32,
+    rows: u32,
+) -> Result<RgbaImage, String> {
+    if frames.is_empty() {
+        return Err("Danh sách khung hình rỗng".to_string());
+    }
+
+    let sheet_w = target_size * cols;
+    let sheet_h = target_size * rows;
+
+    if sheet_w > 16384 || sheet_h > 16384 {
+        return Err(format!(
+            "Kích thước ảnh lưới ({sheet_w}x{sheet_h}px) vượt quá giới hạn OpenGL (16384px) của GPU!"
+        ));
+    }
+
+    let mut sheet = RgbaImage::new(sheet_w, sheet_h);
+
+    for (i, frame) in frames.iter().enumerate() {
+        let col = (i as u32) % cols;
+        let row = (i as u32) / cols;
+        let x = col * target_size;
+        let y = row * target_size;
+        imageops::overlay(&mut sheet, &frame.image, x as i64, y as i64);
+    }
+
+    Ok(sheet)
+}
+
+pub fn build_output_spritesheet(
+    frames: &[FrameData],
+    target_size: u32,
+    layout: SpritesheetLayout,
+) -> Result<(RgbaImage, u32, u32), String> {
+    let frame_count = frames.len() as u32;
+    if frame_count == 0 {
+        return Err("Danh sách khung hình rỗng".to_string());
+    }
+
+    let use_grid = match layout {
+        SpritesheetLayout::Grid => true,
+        SpritesheetLayout::Vertical => false,
+        SpritesheetLayout::Auto => (frame_count * target_size) > 8192,
+    };
+
+    if use_grid {
+        let (cols, rows) = calculate_optimal_grid(frame_count);
+        let sheet = build_grid_spritesheet(frames, target_size, cols, rows)?;
+        Ok((sheet, cols, rows))
+    } else {
+        let sheet_height = target_size * frame_count;
+        if sheet_height > 16384 {
+            return Err(format!(
+                "Tổng chiều cao ảnh ({sheet_height}px) vượt quá giới hạn OpenGL (16384px) của Minecraft! Vui lòng chọn chế độ 'Lưới 2D' để giữ nguyên độ phân giải nét cao mà không bị từ chối tải."
+            ));
+        }
+        let sheet = build_spritesheet(frames, target_size)?;
+        Ok((sheet, 1, frame_count))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

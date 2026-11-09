@@ -11,6 +11,8 @@ public class TotemEntry {
     private final int width;
     private final int height;
     private final int frameCount;
+    private int columns = 1;
+    private int rows = 1;
     private int frameTime;
     private TotemTextureTransform transform;
 
@@ -18,17 +20,21 @@ public class TotemEntry {
     private transient NativeImageBackedTexture texture;
 
     public TotemEntry(String id, String fileName, String displayName, boolean enabled, int width, int height) {
+        this(id, fileName, displayName, enabled, width, height, 1,
+                (width > 0 && height >= width && height % width == 0) ? Math.max(1, height / width) : 1,
+                (width > 0 && height >= width && height % width == 0) ? Math.max(1, height / width) : 1);
+    }
+
+    public TotemEntry(String id, String fileName, String displayName, boolean enabled, int width, int height, int columns, int rows, int frameCount) {
         this.id = id;
         this.fileName = fileName;
         this.displayName = displayName;
         this.enabled = enabled;
         this.width = width;
         this.height = height;
-        if (width > 0 && height >= width && height % width == 0) {
-            this.frameCount = Math.max(1, height / width);
-        } else {
-            this.frameCount = 1;
-        }
+        this.columns = Math.max(1, columns);
+        this.rows = Math.max(1, rows);
+        this.frameCount = Math.max(1, frameCount);
         this.frameTime = 2; // Default 2 ticks per frame
         this.transform = new TotemTextureTransform();
         if (this.frameCount <= 1) {
@@ -72,6 +78,22 @@ public class TotemEntry {
         return frameCount;
     }
 
+    public int getColumns() {
+        return columns;
+    }
+
+    public void setColumns(int columns) {
+        this.columns = Math.max(1, columns);
+    }
+
+    public int getRows() {
+        return rows;
+    }
+
+    public void setRows(int rows) {
+        this.rows = Math.max(1, rows);
+    }
+
     public int getFrameTime() {
         return frameTime;
     }
@@ -112,7 +134,8 @@ public class TotemEntry {
             return 0.0f;
         }
         int currentFrame = (int) ((tick / frameTime) % frameCount);
-        return (float) currentFrame / (float) frameCount;
+        int r = currentFrame / Math.max(1, columns);
+        return (float) r / (float) Math.max(1, rows);
     }
 
     public float getMaxV(long tick) {
@@ -120,7 +143,8 @@ public class TotemEntry {
             return 1.0f;
         }
         int currentFrame = (int) ((tick / frameTime) % frameCount);
-        return (float) (currentFrame + 1) / (float) frameCount;
+        int r = currentFrame / Math.max(1, columns);
+        return (float) (r + 1) / (float) Math.max(1, rows);
     }
 
     public float getU0() {
@@ -141,6 +165,7 @@ public class TotemEntry {
 
     /**
      * Computes UV coordinates [u0, u1, v0, v1] taking into account:
+     * - 2D Grid / Spritesheet matrix (columns x rows)
      * - Spritesheet frame animation
      * - FitMode (FIT, STRETCH, FILL)
      * - Zoom (scale)
@@ -149,8 +174,12 @@ public class TotemEntry {
      */
     public float[] getRenderUVs(long tick) {
         TotemTextureTransform t = getTransform();
-        int frameH = (t.isAnimated() && frameCount > 1) ? height / frameCount : height;
-        float aspect = (float) width / (float) Math.max(1, frameH);
+        int cols = Math.max(1, columns);
+        int rws = Math.max(1, rows);
+
+        int frameW = (t.isAnimated() && frameCount > 1) ? width / cols : width;
+        int frameH = (t.isAnimated() && frameCount > 1) ? height / rws : height;
+        float aspect = (float) frameW / (float) Math.max(1, frameH);
 
         float scale = t.getScale();
         float uSpan = 1.0f;
@@ -190,13 +219,24 @@ public class TotemEntry {
             rawV1 = temp;
         }
 
-        float frameMinV = getMinV(tick);
-        float frameHeight = getMaxV(tick) - frameMinV;
+        int currentFrame = (t.isAnimated() && frameCount > 1) ? (int) ((tick / frameTime) % frameCount) : 0;
+        int col = currentFrame % cols;
+        int row = currentFrame / cols;
 
-        float finalV0 = frameMinV + rawV0 * frameHeight;
-        float finalV1 = frameMinV + rawV1 * frameHeight;
+        float frameMinU = (float) col / (float) cols;
+        float frameMaxU = (float) (col + 1) / (float) cols;
+        float frameMinV = (float) row / (float) rws;
+        float frameMaxV = (float) (row + 1) / (float) rws;
 
-        return new float[]{rawU0, rawU1, finalV0, finalV1};
+        float frameUWidth = frameMaxU - frameMinU;
+        float frameVHeight = frameMaxV - frameMinV;
+
+        float finalU0 = frameMinU + rawU0 * frameUWidth;
+        float finalU1 = frameMinU + rawU1 * frameUWidth;
+        float finalV0 = frameMinV + rawV0 * frameVHeight;
+        float finalV1 = frameMinV + rawV1 * frameVHeight;
+
+        return new float[]{finalU0, finalU1, finalV0, finalV1};
     }
 
     /**
@@ -204,8 +244,12 @@ public class TotemEntry {
      */
     public float[] getQuadBounds() {
         TotemTextureTransform t = getTransform();
-        int frameH = (t.isAnimated() && frameCount > 1) ? height / frameCount : height;
-        float aspect = (float) width / (float) Math.max(1, frameH);
+        int cols = Math.max(1, columns);
+        int rws = Math.max(1, rows);
+
+        int frameW = (t.isAnimated() && frameCount > 1) ? width / cols : width;
+        int frameH = (t.isAnimated() && frameCount > 1) ? height / rws : height;
+        float aspect = (float) frameW / (float) Math.max(1, frameH);
 
         float baseW = 1.0f;
         float baseH = 1.0f;
