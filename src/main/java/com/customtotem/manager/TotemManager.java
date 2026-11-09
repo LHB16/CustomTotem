@@ -397,8 +397,11 @@ public class TotemManager {
                                 }
 
                                 TotemEntry entry = new TotemEntry(p.uniqueId, p.fileName, p.displayName, p.enabled, p.width, p.height, p.cols, p.rows, p.frameCount);
-                                entry.setFps(p.fps);
-                                entry.setFrameTime(p.frameTime);
+                                if (p.fps > 0) {
+                                    entry.setFps(p.fps);
+                                } else if (p.frameTime > 0) {
+                                    entry.setFrameTime(p.frameTime);
+                                }
                                 if (p.transform != null) {
                                     entry.setTransform(p.transform);
                                 }
@@ -634,8 +637,9 @@ public class TotemManager {
             }
 
             TotemEntry entry = new TotemEntry(uniqueId, fileName, displayName, enabled, width, height, cols, rows, frameCount);
-            entry.setFps(fps);
-            if (configEntry != null && configEntry.frameTime > 0) {
+            if (fps > 0) {
+                entry.setFps(fps);
+            } else if (configEntry != null && configEntry.frameTime > 0) {
                 entry.setFrameTime(configEntry.frameTime);
             }
             if (configEntry != null && configEntry.transform != null) {

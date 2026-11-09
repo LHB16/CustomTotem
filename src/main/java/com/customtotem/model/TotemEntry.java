@@ -114,7 +114,9 @@ public class TotemEntry {
 
     public void setFrameTime(int frameTime) {
         this.frameTime = Math.max(1, frameTime);
-        this.fps = Math.max(1, Math.round(20.0f / (float) this.frameTime));
+        if (this.fps <= 0) {
+            this.fps = Math.max(1, Math.round(20.0f / (float) this.frameTime));
+        }
         invalidatePrecomputedCache();
     }
 
@@ -187,14 +189,9 @@ public class TotemEntry {
         if (!getTransform().isAnimated() || frameCount <= 1) {
             return 0;
         }
-        if (timeOrTick > 1000000L) {
-            // Millisecond real-time timing for ultra-smooth 30, 45, 60 FPS
-            long msPerFrame = (fps > 0) ? Math.max(1, 1000 / fps) : Math.max(1, frameTime * 50);
-            return (int) ((timeOrTick / msPerFrame) % frameCount);
-        } else {
-            // Tick-based fallback
-            return (int) ((timeOrTick / Math.max(1, frameTime)) % frameCount);
-        }
+        // Millisecond real-time timing for ultra-smooth 10, 15, 20, 30, 45, 60 FPS
+        long msPerFrame = (fps > 0) ? Math.max(1, 1000 / fps) : Math.max(1, frameTime * 50);
+        return (int) ((timeOrTick / msPerFrame) % frameCount);
     }
 
     public float getMinV(long tick) {
