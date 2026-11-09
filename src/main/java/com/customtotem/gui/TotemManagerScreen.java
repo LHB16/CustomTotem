@@ -56,10 +56,7 @@ public class TotemManagerScreen extends Screen {
         // Button 3: Rescan current folder
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("🔄 Quét Lại"),
-                btn -> {
-                    TotemManager.getInstance().rescanImages();
-                    refreshList();
-                }
+                btn -> TotemManager.getInstance().rescanImages(this::refreshList)
         ).dimensions(startX + (btnWidth + btnSpacing) * 2, topBarY, btnWidth, 20).build());
 
         // Button 4: Switch Totem Pop Mode (SINGLE / SEQUENTIAL / RANDOM)
@@ -205,8 +202,57 @@ public class TotemManagerScreen extends Screen {
                 0xAAAAAA
         );
 
-        // Empty state message
-        if (TotemManager.getInstance().getEntries().isEmpty()) {
+        // Auto-refresh list when background loading completes
+        if (!TotemManager.getInstance().isReloading() && listWidget != null && listWidget.children().size() != TotemManager.getInstance().getEntries().size()) {
+            refreshList();
+        }
+
+        // Background loading indicator
+        if (TotemManager.getInstance().isReloading()) {
+            int cx = this.width / 2;
+            int cy = this.height / 2;
+            int boxW = 240;
+            int boxH = 50;
+            int bx1 = cx - boxW / 2;
+            int by1 = cy - boxH / 2;
+            int bx2 = cx + boxW / 2;
+            int by2 = cy + boxH / 2;
+            context.fill(bx1, by1, bx2, by2, 0xEE141414);
+            // Border
+            context.fill(bx1, by1, bx2, by1 + 1, 0xFF44AA77);
+            context.fill(bx1, by2 - 1, bx2, by2, 0xFF44AA77);
+            context.fill(bx1, by1, bx1 + 1, by2, 0xFF44AA77);
+            context.fill(bx2 - 1, by1, bx2, by2, 0xFF44AA77);
+
+            context.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("§a" + TotemManager.getInstance().getReloadStatus()),
+                    cx,
+                    cy - 14,
+                    0xFFFFFF
+            );
+
+            // Progress bar
+            int total = TotemManager.getInstance().getReloadTotal();
+            int current = TotemManager.getInstance().getReloadCurrent();
+            int barW = boxW - 24;
+            int barH = 6;
+            int barX = cx - barW / 2;
+            int barY = cy + 2;
+            context.fill(barX, barY, barX + barW, barY + barH, 0xFF333333);
+            if (total > 0) {
+                int fillW = Math.min(barW, (int) ((float) current / (float) total * barW));
+                context.fill(barX, barY, barX + fillW, barY + barH, 0xFF00DD88);
+            }
+
+            context.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("§7(Đang chạy nền, game không bị đơ)"),
+                    cx,
+                    cy + 12,
+                    0x888888
+            );
+        } else if (TotemManager.getInstance().getEntries().isEmpty()) {
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
                     Text.literal("§7No custom totems found in active folder."),

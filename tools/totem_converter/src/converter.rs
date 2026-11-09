@@ -100,7 +100,7 @@ pub fn decode_gif(path: &Path, target_size: u32, crop_mode: CropMode) -> Result<
     for f in raw_frames {
         let delay_ms = {
             let (num, denom) = f.delay().numer_denom_ms();
-            if denom == 0 { 100 } else { (num / denom).max(20) }
+            if denom == 0 { 100 } else { (num / denom).max(1) }
         };
         let buffer = f.into_buffer();
         let processed = process_frame(&buffer, target_size, crop_mode);
@@ -199,7 +199,7 @@ pub fn decode_video(
     let frame_bytes = (target_size * target_size * 4) as usize;
     let mut buffer = vec![0u8; frame_bytes];
     let mut frames = Vec::new();
-    let delay_ms = (1000 / fps).max(20);
+    let delay_ms = (1000 / fps).max(1);
 
     loop {
         match stdout.read_exact(&mut buffer) {
@@ -462,7 +462,7 @@ pub fn load_image_sequence(
         natural_sort_key(&name_a).cmp(&natural_sort_key(&name_b))
     });
 
-    let delay_ms = (1000 / fps).max(20);
+    let delay_ms = (1000 / fps).max(1);
     let mut frames = Vec::with_capacity(image_files.len());
 
     for path in &image_files {

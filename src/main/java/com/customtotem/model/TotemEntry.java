@@ -1,5 +1,7 @@
 package com.customtotem.model;
 
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
 
@@ -13,11 +15,19 @@ public class TotemEntry {
     private final int frameCount;
     private int columns = 1;
     private int rows = 1;
-    private int frameTime;
+    private int frameTime = 2; // Default 2 ticks per frame (10 FPS)
+    private int fps = 20;      // Target playback FPS (10, 15, 20, 30, 45, 60...)
     private TotemTextureTransform transform;
 
     private transient Identifier textureId;
     private transient NativeImageBackedTexture texture;
+    private transient boolean textureRegistered = false;
+    private transient RenderLayer cachedRenderLayer = null;
+
+    // High performance precomputed cache to ensure 0 GC allocations per frame
+    private transient float[][] precomputedFrameUVs = null;
+    private transient float[] cachedQuadBounds = null;
+    private transient CacheKey[] cachedKeys = null;
 
     public TotemEntry(String id, String fileName, String displayName, boolean enabled, int width, int height) {
         this(id, fileName, displayName, enabled, width, height, 1,
@@ -35,8 +45,10 @@ public class TotemEntry {
         this.columns = Math.max(1, columns);
         this.rows = Math.max(1, rows);
         this.frameCount = Math.max(1, frameCount);
-        this.frameTime = 2; // Default 2 ticks per frame
+        this.frameTime = 2;
+        this.fps = 20;
         this.transform = new TotemTextureTransform();
+        this.transform.setChangeListener(this::invalidatePrecomputedCache);
         if (this.frameCount <= 1) {
             this.transform.setAnimated(false);
         }
@@ -84,6 +96,7 @@ public class TotemEntry {
 
     public void setColumns(int columns) {
         this.columns = Math.max(1, columns);
+        invalidatePrecomputedCache();
     }
 
     public int getRows() {
@@ -92,6 +105,7 @@ public class TotemEntry {
 
     public void setRows(int rows) {
         this.rows = Math.max(1, rows);
+        invalidatePrecomputedCache();
     }
 
     public int getFrameTime() {
@@ -100,17 +114,34 @@ public class TotemEntry {
 
     public void setFrameTime(int frameTime) {
         this.frameTime = Math.max(1, frameTime);
+        this.fps = Math.max(1, Math.round(20.0f / (float) this.frameTime));
+        invalidatePrecomputedCache();
+    }
+
+    public int getFps() {
+        return fps;
+    }
+
+    public void setFps(int fps) {
+        this.fps = Math.max(1, fps);
+        this.frameTime = Math.max(1, Math.round(20.0f / (float) this.fps));
+        invalidatePrecomputedCache();
     }
 
     public TotemTextureTransform getTransform() {
         if (transform == null) {
             transform = new TotemTextureTransform();
         }
+        transform.setChangeListener(this::invalidatePrecomputedCache);
         return transform;
     }
 
     public void setTransform(TotemTextureTransform transform) {
         this.transform = transform;
+        if (this.transform != null) {
+            this.transform.setChangeListener(this::invalidatePrecomputedCache);
+        }
+        invalidatePrecomputedCache();
     }
 
     public Identifier getTextureId() {
@@ -119,6 +150,23 @@ public class TotemEntry {
 
     public void setTextureId(Identifier textureId) {
         this.textureId = textureId;
+        this.cachedRenderLayer = null;
+        this.cachedKeys = null;
+    }
+
+    public RenderLayer getRenderLayer() {
+        if (cachedRenderLayer == null && textureId != null) {
+            cachedRenderLayer = RenderLayers.entityTranslucent(textureId);
+        }
+        return cachedRenderLayer;
+    }
+
+    public boolean isTextureRegistered() {
+        return textureRegistered;
+    }
+
+    public void setTextureRegistered(boolean textureRegistered) {
+        this.textureRegistered = textureRegistered;
     }
 
     public NativeImageBackedTexture getTexture() {
@@ -129,22 +177,32 @@ public class TotemEntry {
         this.texture = texture;
     }
 
-    public float getMinV(long tick) {
+    public void invalidatePrecomputedCache() {
+        this.precomputedFrameUVs = null;
+        this.cachedQuadBounds = null;
+        this.cachedKeys = null;
+    }
+
+    public int getCurrentFrame(long timeOrTick) {
         if (!getTransform().isAnimated() || frameCount <= 1) {
-            return 0.0f;
+            return 0;
         }
-        int currentFrame = (int) ((tick / frameTime) % frameCount);
-        int r = currentFrame / Math.max(1, columns);
-        return (float) r / (float) Math.max(1, rows);
+        if (timeOrTick > 1000000L) {
+            // Millisecond real-time timing for ultra-smooth 30, 45, 60 FPS
+            long msPerFrame = (fps > 0) ? Math.max(1, 1000 / fps) : Math.max(1, frameTime * 50);
+            return (int) ((timeOrTick / msPerFrame) % frameCount);
+        } else {
+            // Tick-based fallback
+            return (int) ((timeOrTick / Math.max(1, frameTime)) % frameCount);
+        }
+    }
+
+    public float getMinV(long tick) {
+        return getRenderUVs(tick)[2];
     }
 
     public float getMaxV(long tick) {
-        if (!getTransform().isAnimated() || frameCount <= 1) {
-            return 1.0f;
-        }
-        int currentFrame = (int) ((tick / frameTime) % frameCount);
-        int r = currentFrame / Math.max(1, columns);
-        return (float) (r + 1) / (float) Math.max(1, rows);
+        return getRenderUVs(tick)[3];
     }
 
     public float getU0() {
@@ -164,142 +222,150 @@ public class TotemEntry {
     }
 
     /**
-     * Computes UV coordinates [u0, u1, v0, v1] taking into account:
-     * - 2D Grid / Spritesheet matrix (columns x rows)
-     * - Spritesheet frame animation
-     * - FitMode (FIT, STRETCH, FILL)
-     * - Zoom (scale)
-     * - Pan (offsetX, offsetY)
-     * - Flip (flipX, flipY)
+     * Returns precomputed UVs [u0, u1, v0, v1] with ZERO heap allocations.
      */
-    public float[] getRenderUVs(long tick) {
-        TotemTextureTransform t = getTransform();
-        int cols = Math.max(1, columns);
-        int rws = Math.max(1, rows);
-
-        int frameW = (t.isAnimated() && frameCount > 1) ? width / cols : width;
-        int frameH = (t.isAnimated() && frameCount > 1) ? height / rws : height;
-        float aspect = (float) frameW / (float) Math.max(1, frameH);
-
-        float scale = t.getScale();
-        float uSpan = 1.0f;
-        float vSpan = 1.0f;
-
-        if (t.getFitMode() == TotemTextureTransform.FitMode.FILL) {
-            if (aspect > 1.0f) {
-                uSpan = 1.0f / aspect;
-                vSpan = 1.0f;
-            } else if (aspect < 1.0f) {
-                uSpan = 1.0f;
-                vSpan = aspect;
-            }
-        }
-
-        if (scale > 1.0f) {
-            uSpan /= scale;
-            vSpan /= scale;
-        }
-
-        float uCenter = 0.5f - t.getOffsetX() * uSpan;
-        float vCenter = 0.5f + t.getOffsetY() * vSpan;
-
-        float rawU0 = uCenter - 0.5f * uSpan;
-        float rawU1 = uCenter + 0.5f * uSpan;
-        float rawV0 = vCenter - 0.5f * vSpan;
-        float rawV1 = vCenter + 0.5f * vSpan;
-
-        if (t.isFlipX()) {
-            float temp = rawU0;
-            rawU0 = rawU1;
-            rawU1 = temp;
-        }
-        if (t.isFlipY()) {
-            float temp = rawV0;
-            rawV0 = rawV1;
-            rawV1 = temp;
-        }
-
-        int currentFrame = (t.isAnimated() && frameCount > 1) ? (int) ((tick / frameTime) % frameCount) : 0;
-        int col = currentFrame % cols;
-        int row = currentFrame / cols;
-
-        float frameMinU = (float) col / (float) cols;
-        float frameMaxU = (float) (col + 1) / (float) cols;
-        float frameMinV = (float) row / (float) rws;
-        float frameMaxV = (float) (row + 1) / (float) rws;
-
-        float frameUWidth = frameMaxU - frameMinU;
-        float frameVHeight = frameMaxV - frameMinV;
-
-        float finalU0 = frameMinU + rawU0 * frameUWidth;
-        float finalU1 = frameMinU + rawU1 * frameUWidth;
-        float finalV0 = frameMinV + rawV0 * frameVHeight;
-        float finalV1 = frameMinV + rawV1 * frameVHeight;
-
-        return new float[]{finalU0, finalU1, finalV0, finalV1};
+    public float[] getRenderUVs(long timeOrTick) {
+        ensurePrecomputedCache();
+        int frame = getCurrentFrame(timeOrTick);
+        return precomputedFrameUVs[frame];
     }
 
     /**
-     * Calculates model quad bounds [x0, x1, y0, y1] strictly bounded in item space
+     * Calculates model quad bounds [x0, x1, y0, y1] with ZERO heap allocations during render.
      */
     public float[] getQuadBounds() {
-        TotemTextureTransform t = getTransform();
-        int cols = Math.max(1, columns);
-        int rws = Math.max(1, rows);
-
-        int frameW = (t.isAnimated() && frameCount > 1) ? width / cols : width;
-        int frameH = (t.isAnimated() && frameCount > 1) ? height / rws : height;
-        float aspect = (float) frameW / (float) Math.max(1, frameH);
-
-        float baseW = 1.0f;
-        float baseH = 1.0f;
-
-        if (t.getFitMode() == TotemTextureTransform.FitMode.FIT) {
-            if (aspect > 1.0f) {
-                baseW = 1.0f;
-                baseH = 1.0f / aspect;
-            } else if (aspect < 1.0f) {
-                baseW = aspect;
-                baseH = 1.0f;
-            }
-        }
-
-        float scale = t.getScale();
-        float finalW = baseW;
-        float finalH = baseH;
-
-        float xOffset = 0.0f;
-        float yOffset = 0.0f;
-
-        if (scale <= 1.0f) {
-            finalW *= scale;
-            finalH *= scale;
-            xOffset = t.getOffsetX();
-            yOffset = t.getOffsetY();
-        }
-
-        float x0 = 0.5f - 0.5f * finalW + xOffset;
-        float x1 = 0.5f + 0.5f * finalW + xOffset;
-        float y0 = 0.5f - 0.5f * finalH + yOffset;
-        float y1 = 0.5f + 0.5f * finalH + yOffset;
-
-        return new float[]{x0, x1, y0, y1};
+        ensurePrecomputedCache();
+        return cachedQuadBounds;
     }
 
-    public Object getCacheKey(long tick) {
-        TotemTextureTransform t = getTransform();
-        int frame = (t.isAnimated() && frameCount > 1) ? (int) ((tick / frameTime) % frameCount) : 0;
-        return new CacheKey(
-                id,
-                textureId != null ? textureId.toString() : "",
-                t.getFitMode(),
-                t.getScale(),
-                t.getOffsetX(),
-                t.getOffsetY(),
-                t.isFlipX(),
-                t.isFlipY(),
-                frame
-        );
+    private synchronized void ensurePrecomputedCache() {
+        if (precomputedFrameUVs == null || cachedQuadBounds == null) {
+            TotemTextureTransform t = getTransform();
+            int cols = Math.max(1, columns);
+            int rws = Math.max(1, rows);
+
+            int frameW = (t.isAnimated() && frameCount > 1) ? width / cols : width;
+            int frameH = (t.isAnimated() && frameCount > 1) ? height / rws : height;
+            float aspect = (float) frameW / (float) Math.max(1, frameH);
+
+            float scale = t.getScale();
+            float uSpan = 1.0f;
+            float vSpan = 1.0f;
+
+            if (t.getFitMode() == TotemTextureTransform.FitMode.FILL) {
+                if (aspect > 1.0f) {
+                    uSpan = 1.0f / aspect;
+                    vSpan = 1.0f;
+                } else if (aspect < 1.0f) {
+                    uSpan = 1.0f;
+                    vSpan = aspect;
+                }
+            }
+
+            if (scale > 1.0f) {
+                uSpan /= scale;
+                vSpan /= scale;
+            }
+
+            float uCenter = 0.5f - t.getOffsetX() * uSpan;
+            float vCenter = 0.5f + t.getOffsetY() * vSpan;
+
+            float rawU0 = uCenter - 0.5f * uSpan;
+            float rawU1 = uCenter + 0.5f * uSpan;
+            float rawV0 = vCenter - 0.5f * vSpan;
+            float rawV1 = vCenter + 0.5f * vSpan;
+
+            if (t.isFlipX()) {
+                float temp = rawU0;
+                rawU0 = rawU1;
+                rawU1 = temp;
+            }
+            if (t.isFlipY()) {
+                float temp = rawV0;
+                rawV0 = rawV1;
+                rawV1 = temp;
+            }
+
+            // Precompute UVs for all frames
+            precomputedFrameUVs = new float[frameCount][4];
+            for (int f = 0; f < frameCount; f++) {
+                int col = (t.isAnimated() && frameCount > 1) ? (f % cols) : 0;
+                int row = (t.isAnimated() && frameCount > 1) ? (f / cols) : 0;
+
+                float frameMinU = (float) col / (float) cols;
+                float frameMaxU = (float) (col + 1) / (float) cols;
+                float frameMinV = (float) row / (float) rws;
+                float frameMaxV = (float) (row + 1) / (float) rws;
+
+                float frameUWidth = frameMaxU - frameMinU;
+                float frameVHeight = frameMaxV - frameMinV;
+
+                float finalU0 = frameMinU + rawU0 * frameUWidth;
+                float finalU1 = frameMinU + rawU1 * frameUWidth;
+                float finalV0 = frameMinV + rawV0 * frameVHeight;
+                float finalV1 = frameMinV + rawV1 * frameVHeight;
+
+                precomputedFrameUVs[f][0] = finalU0;
+                precomputedFrameUVs[f][1] = finalU1;
+                precomputedFrameUVs[f][2] = finalV0;
+                precomputedFrameUVs[f][3] = finalV1;
+            }
+
+            // Precompute Quad Bounds
+            float baseW = 1.0f;
+            float baseH = 1.0f;
+
+            if (t.getFitMode() == TotemTextureTransform.FitMode.FIT) {
+                if (aspect > 1.0f) {
+                    baseW = 1.0f;
+                    baseH = 1.0f / aspect;
+                } else if (aspect < 1.0f) {
+                    baseW = aspect;
+                    baseH = 1.0f;
+                }
+            }
+
+            float finalW = baseW;
+            float finalH = baseH;
+            float xOffset = 0.0f;
+            float yOffset = 0.0f;
+
+            if (scale <= 1.0f) {
+                finalW *= scale;
+                finalH *= scale;
+                xOffset = t.getOffsetX();
+                yOffset = t.getOffsetY();
+            }
+
+            float x0 = 0.5f - 0.5f * finalW + xOffset;
+            float x1 = 0.5f + 0.5f * finalW + xOffset;
+            float y0 = 0.5f - 0.5f * finalH + yOffset;
+            float y1 = 0.5f + 0.5f * finalH + yOffset;
+
+            cachedQuadBounds = new float[]{x0, x1, y0, y1};
+        }
+    }
+
+    public Object getCacheKey(long timeOrTick) {
+        int frame = getCurrentFrame(timeOrTick);
+        if (cachedKeys == null || cachedKeys.length != frameCount) {
+            cachedKeys = new CacheKey[frameCount];
+        }
+        if (cachedKeys[frame] == null) {
+            TotemTextureTransform t = getTransform();
+            cachedKeys[frame] = new CacheKey(
+                    id,
+                    textureId != null ? textureId.toString() : "",
+                    t.getFitMode(),
+                    t.getScale(),
+                    t.getOffsetX(),
+                    t.getOffsetY(),
+                    t.isFlipX(),
+                    t.isFlipY(),
+                    frame
+            );
+        }
+        return cachedKeys[frame];
     }
 
     public record CacheKey(
@@ -315,6 +381,8 @@ public class TotemEntry {
     ) {}
 
     public void close() {
+        this.textureRegistered = false;
+        this.cachedRenderLayer = null;
         if (texture != null) {
             texture.close();
             texture = null;

@@ -10,6 +10,7 @@ import net.minecraft.item.ItemDisplayContext;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.util.HeldItemContext;
+import net.minecraft.util.Util;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
@@ -19,6 +20,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 @Mixin(ItemModelManager.class)
 public class ItemModelManagerMixin {
@@ -27,6 +29,7 @@ public class ItemModelManagerMixin {
             new Vector3f(0.0f, 0.0f, 0.0f),
             new Vector3f(1.0f, 1.0f, 1.0f)
     };
+    private static final Supplier<Vector3fc[]> BOUNDS_SUPPLIER = () -> BOUNDS_VERTICES;
 
     @Inject(method = "clearAndUpdate", at = @At("HEAD"), cancellable = true)
     private void customtotem$onClearAndUpdate(ItemRenderState renderState, ItemStack stack, ItemDisplayContext displayContext,
@@ -40,13 +43,13 @@ public class ItemModelManagerMixin {
                 renderState.clear();
                 ((ItemRenderStateAccessor) renderState).setDisplayContext(displayContext);
 
-                long tick = TotemManager.getInstance().getClientTicks();
+                long now = Util.getMeasuringTimeMs();
                 if (renderState instanceof KeyedItemRenderState keyed) {
                     if (keyed.getModelKey() instanceof List<?> list) {
                         list.clear();
                     }
                 }
-                renderState.addModelKey(entry.getCacheKey(tick));
+                renderState.addModelKey(entry.getCacheKey(now));
                 if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
                     renderState.markAnimated();
                 }
@@ -54,7 +57,7 @@ public class ItemModelManagerMixin {
                 ItemRenderState.LayerRenderState layer = renderState.newLayer();
                 layer.setSpecialModel(TotemSpecialRenderer.INSTANCE, entry);
                 layer.setTransform(TotemManager.getInstance().getDisplaySettings().getTransformation(displayContext));
-                layer.setVertices(() -> BOUNDS_VERTICES);
+                layer.setVertices(BOUNDS_SUPPLIER);
                 layer.setUseLight(false);
                 ci.cancel();
             }

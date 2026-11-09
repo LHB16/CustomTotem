@@ -252,27 +252,29 @@ impl TotemApp {
                 let (w, h) = sheet.dimensions();
                 let frame_count = self.frames.len();
 
-                // If grid layout and filename does not yet have grid info, append _gridWxH_Nf
-                let final_path = if cols > 1 && !target_path.to_string_lossy().contains("_grid") {
+                // If grid layout and filename does not yet have grid info, append _gridWxH_Nf and _fps
+                let final_path = {
                     let file_stem = target_path.file_stem().unwrap_or_default().to_string_lossy();
                     let ext = target_path.extension().unwrap_or_default().to_string_lossy();
-                    let new_name = format!("{}_grid{}x{}_{}f.{}", file_stem, cols, rows, frame_count, ext);
-                    target_path.with_file_name(new_name)
-                } else {
-                    target_path
+                    let mut stem_str = file_stem.to_string();
+                    if cols > 1 && !stem_str.contains("_grid") {
+                        stem_str = format!("{}_grid{}x{}_{}f", stem_str, cols, rows, frame_count);
+                    }
+                    if !stem_str.to_lowercase().contains("fps") {
+                        stem_str = format!("{}_{}fps", stem_str, self.fps);
+                    }
+                    target_path.with_file_name(format!("{}.{}", stem_str, ext))
                 };
 
                 match sheet.save(&final_path) {
                     Ok(()) => {
-                        // Also write companion sidecar JSON metadata if grid
-                        if cols > 1 {
-                            let json_path = final_path.with_extension("json");
-                            let meta_content = format!(
-                                "{{\n  \"columns\": {},\n  \"rows\": {},\n  \"frameCount\": {}\n}}\n",
-                                cols, rows, frame_count
-                            );
-                            let _ = std::fs::write(&json_path, meta_content);
-                        }
+                        // Also write companion sidecar JSON metadata (including grid and FPS info)
+                        let json_path = final_path.with_extension("json");
+                        let meta_content = format!(
+                            "{{\n  \"columns\": {},\n  \"rows\": {},\n  \"frameCount\": {},\n  \"fps\": {}\n}}\n",
+                            cols, rows, frame_count, self.fps
+                        );
+                        let _ = std::fs::write(&json_path, meta_content);
 
                         let layout_desc = if cols > 1 {
                             format!("Lưới 2D {}x{} ô", cols, rows)
@@ -329,9 +331,9 @@ impl TotemApp {
 
             let file_name = if use_grid {
                 let (cols, rows) = converter::calculate_optimal_grid(frame_count);
-                format!("{}_grid{}x{}_{}f.png", clean_name, cols, rows, frame_count)
+                format!("{}_grid{}x{}_{}f_{}fps.png", clean_name, cols, rows, frame_count, self.fps)
             } else {
-                format!("{}.png", clean_name)
+                format!("{}_{}fps.png", clean_name, self.fps)
             };
 
             let file_path = dir.join(file_name);
@@ -537,9 +539,9 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
             ui.add_space(6.0);
 
             // FPS
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label("Tốc độ khung hình (FPS):");
-                let fps_options = [10, 15, 20];
+                let fps_options = [10, 15, 20, 30, 45, 60];
                 for f in fps_options {
                     let label = format!("{} FPS", f);
                     if ui.selectable_label(app.fps == f, label).clicked() {
@@ -723,9 +725,9 @@ fn render_right_panel(ui: &mut Ui, app: &mut TotemApp) {
 
                 let default_name = if use_grid {
                     let (cols, rows) = converter::calculate_optimal_grid(frame_count);
-                    format!("{}_grid{}x{}_{}f.png", app.totem_name.replace(' ', "_"), cols, rows, frame_count)
+                    format!("{}_grid{}x{}_{}f_{}fps.png", app.totem_name.replace(' ', "_"), cols, rows, frame_count, app.fps)
                 } else {
-                    format!("{}.png", app.totem_name.replace(' ', "_"))
+                    format!("{}_{}fps.png", app.totem_name.replace(' ', "_"), app.fps)
                 };
 
                 let mut dialog = rfd::FileDialog::new()

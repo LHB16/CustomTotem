@@ -125,14 +125,37 @@ public class TextureAdjustScreen extends Screen {
         // Toggle Animation (if spritesheet detected)
         if (entry.getFrameCount() > 1) {
             animButton = ButtonWidget.builder(
-                    Text.literal("Anim: " + (transform.isAnimated() ? "§aON (" + entry.getFrameCount() + "f)" : "§7OFF (Static)")),
+                    Text.literal("Anim: " + (transform.isAnimated() ? "§aON" : "§7OFF")),
                     btn -> {
                         transform.setAnimated(!transform.isAnimated());
-                        btn.setMessage(Text.literal("Anim: " + (transform.isAnimated() ? "§aON (" + entry.getFrameCount() + "f)" : "§7OFF (Static)")));
+                        btn.setMessage(Text.literal("Anim: " + (transform.isAnimated() ? "§aON" : "§7OFF")));
                         TotemManager.getInstance().saveConfig();
                     }
-            ).dimensions(centerX - 120, controlsY + 125, 240, 20).build();
+            ).dimensions(centerX - 120, controlsY + 125, btnWidth, 20).build();
             this.addDrawableChild(animButton);
+
+            // FPS cycle button: 10, 15, 20, 30, 45, 60
+            ButtonWidget fpsButton = ButtonWidget.builder(
+                    Text.literal("Speed: §b" + entry.getFps() + " FPS"),
+                    btn -> {
+                        int[] fpsOptions = {10, 15, 20, 30, 45, 60};
+                        int current = entry.getFps();
+                        int nextFps = fpsOptions[0];
+                        for (int i = 0; i < fpsOptions.length; i++) {
+                            if (fpsOptions[i] == current) {
+                                nextFps = fpsOptions[(i + 1) % fpsOptions.length];
+                                break;
+                            } else if (fpsOptions[i] > current) {
+                                nextFps = fpsOptions[i];
+                                break;
+                            }
+                        }
+                        entry.setFps(nextFps);
+                        btn.setMessage(Text.literal("Speed: §b" + entry.getFps() + " FPS"));
+                        TotemManager.getInstance().saveConfig();
+                    }
+            ).dimensions(centerX + 5, controlsY + 125, btnWidth, 20).build();
+            this.addDrawableChild(fpsButton);
         }
 
         int bottomY = controlsY + (entry.getFrameCount() > 1 ? 150 : 125);
@@ -185,8 +208,8 @@ public class TextureAdjustScreen extends Screen {
             int qy1 = (int) (previewY + (1.0f - bounds[3]) * boxSize);
             int qy2 = (int) (previewY + (1.0f - bounds[2]) * boxSize);
 
-            long tick = TotemManager.getInstance().getClientTicks();
-            float[] uvs = entry.getRenderUVs(tick);
+            long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
+            float[] uvs = entry.getRenderUVs(nowMs);
 
             context.enableScissor(previewX, previewY, previewX + boxSize, previewY + boxSize);
             context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, uvs[0], uvs[1], uvs[2], uvs[3]);

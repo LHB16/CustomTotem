@@ -29,8 +29,19 @@ public class TotemTextureTransform {
     private boolean flipX = false;
     private boolean flipY = false;
     private boolean animated = true;
+    private transient Runnable changeListener = null;
 
     public TotemTextureTransform() {
+    }
+
+    public void setChangeListener(Runnable changeListener) {
+        this.changeListener = changeListener;
+    }
+
+    private void markDirty() {
+        if (changeListener != null) {
+            changeListener.run();
+        }
     }
 
     public FitMode getFitMode() {
@@ -39,6 +50,7 @@ public class TotemTextureTransform {
 
     public void setFitMode(FitMode fitMode) {
         this.fitMode = fitMode;
+        markDirty();
     }
 
     public float getScale() {
@@ -47,6 +59,7 @@ public class TotemTextureTransform {
 
     public void setScale(float scale) {
         this.scale = Math.max(0.1f, Math.min(3.0f, scale));
+        markDirty();
     }
 
     public float getOffsetX() {
@@ -55,6 +68,7 @@ public class TotemTextureTransform {
 
     public void setOffsetX(float offsetX) {
         this.offsetX = Math.max(-1.5f, Math.min(1.5f, offsetX));
+        markDirty();
     }
 
     public float getOffsetY() {
@@ -63,6 +77,7 @@ public class TotemTextureTransform {
 
     public void setOffsetY(float offsetY) {
         this.offsetY = Math.max(-1.5f, Math.min(1.5f, offsetY));
+        markDirty();
     }
 
     public boolean isFlipX() {
@@ -71,6 +86,7 @@ public class TotemTextureTransform {
 
     public void setFlipX(boolean flipX) {
         this.flipX = flipX;
+        markDirty();
     }
 
     public boolean isFlipY() {
@@ -79,6 +95,7 @@ public class TotemTextureTransform {
 
     public void setFlipY(boolean flipY) {
         this.flipY = flipY;
+        markDirty();
     }
 
     public boolean isAnimated() {
@@ -87,6 +104,7 @@ public class TotemTextureTransform {
 
     public void setAnimated(boolean animated) {
         this.animated = animated;
+        markDirty();
     }
 
     public void reset() {
@@ -96,5 +114,6 @@ public class TotemTextureTransform {
         this.offsetY = 0.0f;
         this.flipX = false;
         this.flipY = false;
+        markDirty();
     }
 }

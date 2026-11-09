@@ -156,10 +156,12 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             // Draw Thumbnail: (texture, x1, y1, x2, y2, u0, u1, v0, v1)
             if (entry.getTextureId() != null) {
-                TotemManager.getInstance().ensureTextureRegistered(entry);
-                if (MinecraftClient.getInstance().getTextureManager().getTexture(entry.getTextureId()) != null) {
-                    long tick = TotemManager.getInstance().getClientTicks();
-                    float[] uvs = entry.getRenderUVs(tick);
+                if (!entry.isTextureRegistered()) {
+                    TotemManager.getInstance().ensureTextureRegistered(entry);
+                }
+                if (entry.isTextureRegistered()) {
+                    long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
+                    float[] uvs = entry.getRenderUVs(nowMs);
                     float[] bounds = entry.getQuadBounds();
                     float boxSize = 24.0f;
                     int qx1 = (int) (x + 2 + bounds[0] * boxSize);
@@ -182,7 +184,7 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             String info = entry.getWidth() + "x" + entry.getHeight();
             if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
-                info += " (" + entry.getFrameCount() + "f)";
+                info += " (" + entry.getFrameCount() + "f @" + entry.getFps() + "fps)";
                 if (entry.getColumns() > 1) {
                     info += " §b[" + entry.getColumns() + "x" + entry.getRows() + " Grid]";
                 }

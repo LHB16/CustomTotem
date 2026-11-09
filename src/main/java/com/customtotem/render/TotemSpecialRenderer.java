@@ -10,6 +10,7 @@ import net.minecraft.client.render.item.model.special.SpecialModelRenderer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.item.ItemDisplayContext;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.Util;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
@@ -31,13 +32,16 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
             return;
         }
 
-        TotemManager.getInstance().ensureTextureRegistered(entry);
-        if (net.minecraft.client.MinecraftClient.getInstance().getTextureManager().getTexture(entry.getTextureId()) == null) {
-            return;
+        if (!entry.isTextureRegistered()) {
+            TotemManager.getInstance().ensureTextureRegistered(entry);
+            if (!entry.isTextureRegistered()) {
+                return;
+            }
         }
 
-        long tick = TotemManager.getInstance().getClientTicks();
-        float[] uvs = entry.getRenderUVs(tick);
+        // Millisecond-based timing ensures smooth playback at 30, 45, 60 FPS
+        long nowMs = Util.getMeasuringTimeMs();
+        float[] uvs = entry.getRenderUVs(nowMs);
         final float u0 = uvs[0];
         final float u1 = uvs[1];
         final float v0 = uvs[2]; // Top
@@ -53,7 +57,8 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
         final float northZ = 0.499f;
         final int renderLight = (displayContext == ItemDisplayContext.GUI) ? 0x00F000F0 : light;
 
-        RenderLayer layer = RenderLayers.entityTranslucent(entry.getTextureId());
+        RenderLayer layer = entry.getRenderLayer();
+        if (layer == null) return;
 
         queue.submitCustom(matrices, layer, (matrixEntry, consumer) -> {
             // South Face (Front, Normal: 0, 0, 1 at southZ)
