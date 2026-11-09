@@ -96,7 +96,8 @@ public class TotemManager {
                     entry.getFileName(),
                     entry.getDisplayName(),
                     entry.isEnabled(),
-                    entry.getFrameTime()
+                    entry.getFrameTime(),
+                    entry.getTransform()
             ));
         }
 
@@ -195,6 +196,9 @@ public class TotemManager {
             TotemEntry entry = new TotemEntry(uniqueId, fileName, displayName, enabled, width, height);
             if (configEntry != null && configEntry.frameTime > 0) {
                 entry.setFrameTime(configEntry.frameTime);
+            }
+            if (configEntry != null && configEntry.transform != null) {
+                entry.setTransform(configEntry.transform);
             }
             entry.setTextureId(textureId);
             entry.setTexture(texture);

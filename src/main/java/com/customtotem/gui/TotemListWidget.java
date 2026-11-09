@@ -33,13 +33,14 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
     @Override
     public int getRowWidth() {
-        return Math.min(this.width - 24, 480);
+        return Math.min(this.width - 20, 520);
     }
 
     public class TotemEntryWidget extends ElementListWidget.Entry<TotemEntryWidget> {
         private final TotemEntry entry;
         private final ButtonWidget toggleButton;
         private final ButtonWidget selectButton;
+        private final ButtonWidget editButton;
         private final ButtonWidget upButton;
         private final ButtonWidget downButton;
         private final ButtonWidget deleteButton;
@@ -56,20 +57,30 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
                         TotemManager.getInstance().saveConfig();
                         btn.setMessage(Text.literal(entry.isEnabled() ? "§a[Active]" : "§7[Off]"));
                     }
-            ).dimensions(0, 0, 52, 20).build();
+            ).dimensions(0, 0, 50, 20).build();
 
             // Select button
             boolean isCurrent = TotemManager.getInstance().getCurrentActiveTotem() == entry;
             this.selectButton = ButtonWidget.builder(
-                    Text.literal(isCurrent ? "§2✓ Selected" : "Select"),
+                    Text.literal(isCurrent ? "§2✓ Using" : "Select"),
                     btn -> {
                         TotemManager.getInstance().setCurrentTotem(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 65, 20).build();
+            ).dimensions(0, 0, 58, 20).build();
             if (isCurrent) {
                 this.selectButton.active = false;
             }
+
+            // Edit / Adjust Canvas button
+            this.editButton = ButtonWidget.builder(
+                    Text.literal("🖌"),
+                    btn -> {
+                        if (MinecraftClient.getInstance() != null) {
+                            MinecraftClient.getInstance().setScreen(new TextureAdjustScreen(screen, entry));
+                        }
+                    }
+            ).dimensions(0, 0, 24, 20).build();
 
             // Move up button
             this.upButton = ButtonWidget.builder(
@@ -100,6 +111,7 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             this.children.add(toggleButton);
             this.children.add(selectButton);
+            this.children.add(editButton);
             this.children.add(upButton);
             this.children.add(downButton);
             this.children.add(deleteButton);
@@ -122,14 +134,18 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
                 context.fill(x - 2, y - 2, x + width + 2, y + height + 2, 0x20FFFFFF);
             }
 
-            // Thumbnail background
+            // Thumbnail background box
             context.fill(x, y + 1, x + 26, y + 27, 0xFF1E1E1E);
 
-            // Draw Totem Thumbnail
+            // Draw Thumbnail: (texture, x1, y1, x2, y2, u0, u1, v0, v1)
             if (entry.getTextureId() != null) {
-                float minV = entry.getMinV(TotemManager.getInstance().getClientTicks());
-                float maxV = entry.getMaxV(TotemManager.getInstance().getClientTicks());
-                context.drawTexturedQuad(entry.getTextureId(), x + 1, x + 25, y + 2, y + 26, 0.0f, 1.0f, minV, maxV);
+                long tick = TotemManager.getInstance().getClientTicks();
+                float u0 = entry.getU0();
+                float u1 = entry.getU1();
+                float v0 = entry.getV0(tick);
+                float v1 = entry.getV1(tick);
+
+                context.drawTexturedQuad(entry.getTextureId(), x + 2, y + 2, x + 25, y + 26, u0, u1, v0, v1);
             }
 
             // Text info
@@ -140,8 +156,11 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             context.drawTextWithShadow(textRenderer, Text.literal(name), x + 30, y + 4, isCurrent ? 0x55FF55 : 0xFFFFFF);
 
             String info = entry.getWidth() + "x" + entry.getHeight();
-            if (entry.getFrameCount() > 1) {
+            if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
                 info += " (" + entry.getFrameCount() + "f)";
+            }
+            if (entry.getTransform().getScale() != 1.0f || entry.getTransform().getOffsetX() != 0.0f || entry.getTransform().getOffsetY() != 0.0f) {
+                info += " §e[Custom]";
             }
             context.drawTextWithShadow(textRenderer, Text.literal(info), x + 30, y + 16, 0x888888);
 
@@ -162,14 +181,19 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             upButton.setX(currentRight - 20);
             upButton.setY(btnY);
             upButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 25;
+            currentRight -= 27;
 
-            selectButton.setX(currentRight - 65);
+            editButton.setX(currentRight - 24);
+            editButton.setY(btnY);
+            editButton.render(context, mouseX, mouseY, tickDelta);
+            currentRight -= 28;
+
+            selectButton.setX(currentRight - 58);
             selectButton.setY(btnY);
             selectButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 68;
+            currentRight -= 62;
 
-            toggleButton.setX(currentRight - 52);
+            toggleButton.setX(currentRight - 50);
             toggleButton.setY(btnY);
             toggleButton.render(context, mouseX, mouseY, tickDelta);
         }
