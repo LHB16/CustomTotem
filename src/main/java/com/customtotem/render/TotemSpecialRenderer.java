@@ -58,37 +58,42 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
         final boolean fullbright = TotemManager.getInstance().isFullbright();
         final int renderLight = (fullbright || displayContext == ItemDisplayContext.GUI) ? 0x00F000F0 : light;
 
-        RenderLayer layer = entry.getRenderLayer();
+        RenderLayer layer = entry.getRenderLayer(fullbright || displayContext == ItemDisplayContext.GUI);
         if (layer == null) return;
 
-        queue.submitCustom(matrices, layer, (matrixEntry, consumer) -> {
-            // South Face (Front, Normal: 0, 0, 1 at southZ)
-            // Winding: Top-Left -> Bottom-Left -> Bottom-Right -> Top-Right
-            vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
-            vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
-            vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
-            vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+        final float southNy = fullbright ? 1.0f : 0.0f;
+        final float southNz = fullbright ? 0.0f : 1.0f;
+        final float northNy = fullbright ? 1.0f : 0.0f;
+        final float northNz = fullbright ? 0.0f : -1.0f;
 
-            // North Face (Back, Normal: 0, 0, -1 at northZ)
+        queue.submitCustom(matrices, layer, (matrixEntry, consumer) -> {
+            // South Face (Front)
+            // Winding: Top-Left -> Bottom-Left -> Bottom-Right -> Top-Right
+            vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, southNy, southNz, renderLight, overlay);
+            vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, southNy, southNz, renderLight, overlay);
+            vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, southNy, southNz, renderLight, overlay);
+            vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, southNy, southNz, renderLight, overlay);
+
+            // North Face (Back)
             // Winding viewed from behind: Top-Left (x1) -> Bottom-Left (x1) -> Bottom-Right (x0) -> Top-Right (x0)
-            vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
-            vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
-            vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
-            vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+            vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, northNy, northNz, renderLight, overlay);
+            vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, northNy, northNz, renderLight, overlay);
+            vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, northNy, northNz, renderLight, overlay);
+            vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, northNy, northNz, renderLight, overlay);
         });
 
         if (glint) {
             RenderLayer glintLayer = RenderLayers.glintTranslucent();
             queue.submitCustom(matrices, glintLayer, (matrixEntry, consumer) -> {
-                vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
-                vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
-                vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
-                vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, southNy, southNz, renderLight, overlay);
+                vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, southNy, southNz, renderLight, overlay);
+                vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, southNy, southNz, renderLight, overlay);
+                vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, southNy, southNz, renderLight, overlay);
 
-                vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
-                vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
-                vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
-                vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, northNy, northNz, renderLight, overlay);
+                vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, northNy, northNz, renderLight, overlay);
+                vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, northNy, northNz, renderLight, overlay);
+                vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, northNy, northNz, renderLight, overlay);
             });
         }
     }

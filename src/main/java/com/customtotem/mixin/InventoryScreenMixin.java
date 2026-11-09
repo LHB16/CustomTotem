@@ -42,8 +42,8 @@ public abstract class InventoryScreenMixin extends RecipeBookScreen<PlayerScreen
                 }
 
                 if (settings.isShowVanillaSlots()) {
-                    // Draw vanilla frame/slots with subtle transparency so slots remain clearly legible
-                    int slotAlpha = 150;
+                    // Draw vanilla frame/slots with user-configured opacity
+                    int slotAlpha = Math.max(1, Math.min(255, Math.round(settings.getVanillaSlotsOpacity() * 255)));
                     int slotColor = (slotAlpha << 24) | 0x00FFFFFF;
                     context.drawTexture(RenderPipelines.GUI_TEXTURED,
                             Identifier.ofVanilla("textures/gui/container/inventory.png"),

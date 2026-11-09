@@ -48,6 +48,7 @@ public class InventoryGuiSettings {
     private String imageFileName = null;
     private float opacity = 1.0f;
     private boolean showVanillaSlots = true;
+    private float vanillaSlotsOpacity = 0.7f;
     private float scale = 1.0f;
     private float offsetX = 0.0f;
     private float offsetY = 0.0f;
@@ -96,11 +97,23 @@ public class InventoryGuiSettings {
     }
 
     public boolean isShowVanillaSlots() {
-        return showVanillaSlots;
+        return showVanillaSlots && vanillaSlotsOpacity > 0.001f;
     }
 
     public void setShowVanillaSlots(boolean showVanillaSlots) {
         this.showVanillaSlots = showVanillaSlots;
+        if (showVanillaSlots && this.vanillaSlotsOpacity <= 0.001f) {
+            this.vanillaSlotsOpacity = 0.7f;
+        }
+    }
+
+    public float getVanillaSlotsOpacity() {
+        return Math.max(0.0f, Math.min(1.0f, vanillaSlotsOpacity));
+    }
+
+    public void setVanillaSlotsOpacity(float opacity) {
+        this.vanillaSlotsOpacity = Math.max(0.0f, Math.min(1.0f, opacity));
+        this.showVanillaSlots = this.vanillaSlotsOpacity > 0.001f;
     }
 
     public float getScale() {
@@ -132,5 +145,7 @@ public class InventoryGuiSettings {
         this.offsetX = 0.0f;
         this.offsetY = 0.0f;
         this.fitMode = FitMode.CROP;
+        this.vanillaSlotsOpacity = 0.7f;
+        this.showVanillaSlots = true;
     }
 }

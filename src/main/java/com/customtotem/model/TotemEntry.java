@@ -24,6 +24,7 @@ public class TotemEntry {
     private transient NativeImageBackedTexture texture;
     private transient boolean textureRegistered = false;
     private transient RenderLayer cachedRenderLayer = null;
+    private transient RenderLayer cachedEmissiveRenderLayer = null;
 
     // High performance precomputed cache to ensure 0 GC allocations per frame
     private transient float[][] precomputedFrameUVs = null;
@@ -164,14 +165,29 @@ public class TotemEntry {
     public void setTextureId(Identifier textureId) {
         this.textureId = textureId;
         this.cachedRenderLayer = null;
+        this.cachedEmissiveRenderLayer = null;
         this.cachedKeys = null;
     }
 
     public RenderLayer getRenderLayer() {
-        if (cachedRenderLayer == null && textureId != null) {
-            cachedRenderLayer = RenderLayers.entityTranslucent(textureId);
+        return getRenderLayer(com.customtotem.manager.TotemManager.getInstance().isFullbright());
+    }
+
+    public RenderLayer getRenderLayer(boolean fullbright) {
+        if (textureId == null) {
+            return null;
         }
-        return cachedRenderLayer;
+        if (fullbright) {
+            if (cachedEmissiveRenderLayer == null) {
+                cachedEmissiveRenderLayer = RenderLayers.entityTranslucentEmissive(textureId);
+            }
+            return cachedEmissiveRenderLayer;
+        } else {
+            if (cachedRenderLayer == null) {
+                cachedRenderLayer = RenderLayers.entityTranslucent(textureId);
+            }
+            return cachedRenderLayer;
+        }
     }
 
     public boolean isTextureRegistered() {
@@ -444,6 +460,7 @@ public class TotemEntry {
     public void close() {
         this.textureRegistered = false;
         this.cachedRenderLayer = null;
+        this.cachedEmissiveRenderLayer = null;
         if (texture != null) {
             texture.close();
             texture = null;

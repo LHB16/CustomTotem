@@ -31,6 +31,7 @@ public class InventoryGuiSettingsScreen extends Screen {
     private ButtonWidget modeButton;
     private ButtonWidget slotsOverlayButton;
     private CustomSliderWidget opacitySlider;
+    private CustomSliderWidget slotsOpacitySlider;
     private CustomSliderWidget zoomSlider;
     private CustomSliderWidget offsetXSlider;
     private CustomSliderWidget offsetYSlider;
@@ -123,13 +124,17 @@ public class InventoryGuiSettingsScreen extends Screen {
                     settings.setShowVanillaSlots(!settings.isShowVanillaSlots());
                     TotemManager.getInstance().saveConfig();
                     btn.setMessage(getSlotsOverlayText());
+                    if (slotsOpacitySlider != null) {
+                        slotsOpacitySlider.setNormalizedValue(settings.getVanillaSlotsOpacity());
+                    }
                 }
         ).dimensions(controlsX, controlsY + rowGap * 4, controlsW, 20).build();
         this.addDrawableChild(slotsOverlayButton);
 
-        // Row 5: Opacity Slider (10% to 100%)
+        // Row 5: Side-by-side Opacity Sliders (Image Opacity & Slots Opacity)
+        int halfW = (controlsW - 4) / 2;
         opacitySlider = new CustomSliderWidget(
-                controlsX, controlsY + rowGap * 5, controlsW, 20,
+                controlsX, controlsY + rowGap * 5, halfW, 20,
                 getOpacityText(),
                 (settings.getOpacity() - 0.1) / 0.9,
                 this::getOpacityText,
@@ -140,6 +145,21 @@ public class InventoryGuiSettingsScreen extends Screen {
                 }
         );
         this.addDrawableChild(opacitySlider);
+
+        slotsOpacitySlider = new CustomSliderWidget(
+                controlsX + halfW + 4, controlsY + rowGap * 5, halfW, 20,
+                getSlotsOpacityText(),
+                settings.getVanillaSlotsOpacity(),
+                this::getSlotsOpacityText,
+                val -> {
+                    settings.setVanillaSlotsOpacity(Math.round(val.floatValue() * 100.0f) / 100.0f);
+                    TotemManager.getInstance().saveConfig();
+                    if (slotsOverlayButton != null) {
+                        slotsOverlayButton.setMessage(getSlotsOverlayText());
+                    }
+                }
+        );
+        this.addDrawableChild(slotsOpacitySlider);
 
         // Row 6: Zoom / Scale Slider (0.5x to 3.0x)
         zoomSlider = new CustomSliderWidget(
@@ -156,7 +176,6 @@ public class InventoryGuiSettingsScreen extends Screen {
         this.addDrawableChild(zoomSlider);
 
         // Row 7: Offset X and Offset Y Sliders (Side-by-side, -1.0 to 1.0)
-        int halfW = (controlsW - 4) / 2;
         offsetXSlider = new CustomSliderWidget(
                 controlsX, controlsY + rowGap * 7, halfW, 20,
                 getOffsetXText(),
@@ -192,6 +211,7 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                     updateSliders();
                     if (fitModeButton != null) fitModeButton.setMessage(getFitModeText());
+                    if (slotsOverlayButton != null) slotsOverlayButton.setMessage(getSlotsOverlayText());
                 }
         ).dimensions(controlsX, controlsY + rowGap * 8, btn3W, 20).build());
 
@@ -227,6 +247,12 @@ public class InventoryGuiSettingsScreen extends Screen {
         }
         if (offsetYSlider != null) {
             offsetYSlider.setNormalizedValue((settings.getOffsetY() - (-1.0)) / 2.0);
+        }
+        if (opacitySlider != null) {
+            opacitySlider.setNormalizedValue((settings.getOpacity() - 0.1) / 0.9);
+        }
+        if (slotsOpacitySlider != null) {
+            slotsOpacitySlider.setNormalizedValue(settings.getVanillaSlotsOpacity());
         }
     }
 
@@ -265,11 +291,15 @@ public class InventoryGuiSettingsScreen extends Screen {
     }
 
     private Text getSlotsOverlayText() {
-        return Text.literal("Khung Ô Đồ: " + (settings.isShowVanillaSlots() ? "§aHIỆN" : "§7ẨN"));
+        return Text.literal("Khung Ô: " + (settings.isShowVanillaSlots() ? "§aHIỆN (" + Math.round(settings.getVanillaSlotsOpacity() * 100) + "%)" : "§7ẨN"));
     }
 
     private Text getOpacityText() {
-        return Text.literal(String.format("Độ mờ: §a%d%%", Math.round(settings.getOpacity() * 100)));
+        return Text.literal(String.format("Mờ ảnh: §a%d%%", Math.round(settings.getOpacity() * 100)));
+    }
+
+    private Text getSlotsOpacityText() {
+        return Text.literal(String.format("Mờ ô: §a%d%%", Math.round(settings.getVanillaSlotsOpacity() * 100)));
     }
 
     private Text getZoomText() {
@@ -383,7 +413,8 @@ public class InventoryGuiSettingsScreen extends Screen {
             InventoryGuiRenderer.renderBackground(context, texture, imgW, imgH, px, py, INV_WIDTH, INV_HEIGHT, settings);
 
             if (settings.isShowVanillaSlots()) {
-                int slotColor = (180 << 24) | 0x00FFFFFF;
+                int slotAlpha = Math.max(1, Math.min(255, Math.round(settings.getVanillaSlotsOpacity() * 255)));
+                int slotColor = (slotAlpha << 24) | 0x00FFFFFF;
                 context.drawTexture(RenderPipelines.GUI_TEXTURED,
                         Identifier.ofVanilla("textures/gui/container/inventory.png"),
                         px, py, 0.0f, 0.0f, INV_WIDTH, INV_HEIGHT,
@@ -398,10 +429,12 @@ public class InventoryGuiSettingsScreen extends Screen {
         } else {
             // Fallback preview when disabled or no texture selected
             if (settings.isShowVanillaSlots()) {
+                int slotAlpha = Math.max(1, Math.min(255, Math.round(settings.getVanillaSlotsOpacity() * 255)));
+                int slotColor = (slotAlpha << 24) | 0x00FFFFFF;
                 context.drawTexture(RenderPipelines.GUI_TEXTURED,
                         Identifier.ofVanilla("textures/gui/container/inventory.png"),
                         px, py, 0.0f, 0.0f, INV_WIDTH, INV_HEIGHT,
-                        INV_WIDTH, INV_HEIGHT, 256, 256, 0xFFFFFFFF);
+                        INV_WIDTH, INV_HEIGHT, 256, 256, slotColor);
 
                 if (this.client != null && this.client.player != null) {
                     InventoryScreen.drawEntity(context, px + 26, py + 8, px + 75, py + 78,
