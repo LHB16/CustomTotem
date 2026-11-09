@@ -242,6 +242,34 @@ public class TotemEntry {
         return new float[]{x0, x1, y0, y1};
     }
 
+    public Object getCacheKey(long tick) {
+        TotemTextureTransform t = getTransform();
+        int frame = (t.isAnimated() && frameCount > 1) ? (int) ((tick / frameTime) % frameCount) : 0;
+        return new CacheKey(
+                id,
+                textureId != null ? textureId.toString() : "",
+                t.getFitMode(),
+                t.getScale(),
+                t.getOffsetX(),
+                t.getOffsetY(),
+                t.isFlipX(),
+                t.isFlipY(),
+                frame
+        );
+    }
+
+    public record CacheKey(
+            String id,
+            String texturePath,
+            TotemTextureTransform.FitMode fitMode,
+            float scale,
+            float offsetX,
+            float offsetY,
+            boolean flipX,
+            boolean flipY,
+            int frame
+    ) {}
+
     public void close() {
         if (texture != null) {
             texture.close();

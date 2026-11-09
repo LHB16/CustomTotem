@@ -5,6 +5,7 @@ import com.customtotem.model.TotemEntry;
 import com.customtotem.render.TotemSpecialRenderer;
 import net.minecraft.client.item.ItemModelManager;
 import net.minecraft.client.render.item.ItemRenderState;
+import net.minecraft.client.render.item.KeyedItemRenderState;
 import net.minecraft.item.ItemDisplayContext;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -16,6 +17,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.List;
 
 @Mixin(ItemModelManager.class)
 public class ItemModelManagerMixin {
@@ -36,11 +39,23 @@ public class ItemModelManagerMixin {
             if (entry != null && entry.getTextureId() != null) {
                 renderState.clear();
                 ((ItemRenderStateAccessor) renderState).setDisplayContext(displayContext);
+
+                long tick = TotemManager.getInstance().getClientTicks();
+                if (renderState instanceof KeyedItemRenderState keyed) {
+                    if (keyed.getModelKey() instanceof List<?> list) {
+                        list.clear();
+                    }
+                }
+                renderState.addModelKey(entry.getCacheKey(tick));
+                if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
+                    renderState.markAnimated();
+                }
+
                 ItemRenderState.LayerRenderState layer = renderState.newLayer();
                 layer.setSpecialModel(TotemSpecialRenderer.INSTANCE, entry);
                 layer.setTransform(TotemManager.getInstance().getDisplaySettings().getTransformation(displayContext));
                 layer.setVertices(() -> BOUNDS_VERTICES);
-                layer.setUseLight(true);
+                layer.setUseLight(false);
                 ci.cancel();
             }
         }

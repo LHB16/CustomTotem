@@ -46,37 +46,38 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
 
         final float southZ = 0.501f;
         final float northZ = 0.499f;
+        final int renderLight = (displayContext == ItemDisplayContext.GUI) ? 0x00F000F0 : light;
 
         RenderLayer layer = RenderLayers.entityTranslucent(entry.getTextureId());
 
         queue.submitCustom(matrices, layer, (matrixEntry, consumer) -> {
             // South Face (Front, Normal: 0, 0, 1 at southZ)
             // Winding: Top-Left -> Bottom-Left -> Bottom-Right -> Top-Right
-            vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, 0.0f, 1.0f, light, overlay);
-            vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, 0.0f, 1.0f, light, overlay);
-            vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, 0.0f, 1.0f, light, overlay);
-            vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, 0.0f, 1.0f, light, overlay);
+            vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+            vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+            vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+            vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
 
             // North Face (Back, Normal: 0, 0, -1 at northZ)
             // Winding viewed from behind: Top-Left (x1) -> Bottom-Left (x1) -> Bottom-Right (x0) -> Top-Right (x0)
-            vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, 0.0f, -1.0f, light, overlay);
-            vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, 0.0f, -1.0f, light, overlay);
-            vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, 0.0f, -1.0f, light, overlay);
-            vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, 0.0f, -1.0f, light, overlay);
+            vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+            vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+            vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+            vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
         });
 
         if (glint) {
             RenderLayer glintLayer = RenderLayers.glintTranslucent();
             queue.submitCustom(matrices, glintLayer, (matrixEntry, consumer) -> {
-                vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, 0.0f, 1.0f, light, overlay);
-                vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, 0.0f, 1.0f, light, overlay);
-                vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, 0.0f, 1.0f, light, overlay);
-                vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, 0.0f, 1.0f, light, overlay);
+                vertex(consumer, matrixEntry, x0, y1, southZ, u0, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x0, y0, southZ, u0, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x1, y0, southZ, u1, v1, 0.0f, 0.0f, 1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x1, y1, southZ, u1, v0, 0.0f, 0.0f, 1.0f, renderLight, overlay);
 
-                vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, 0.0f, -1.0f, light, overlay);
-                vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, 0.0f, -1.0f, light, overlay);
-                vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, 0.0f, -1.0f, light, overlay);
-                vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, 0.0f, -1.0f, light, overlay);
+                vertex(consumer, matrixEntry, x1, y1, northZ, u1, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x1, y0, northZ, u1, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x0, y0, northZ, u0, v1, 0.0f, 0.0f, -1.0f, renderLight, overlay);
+                vertex(consumer, matrixEntry, x0, y1, northZ, u0, v0, 0.0f, 0.0f, -1.0f, renderLight, overlay);
             });
         }
     }
