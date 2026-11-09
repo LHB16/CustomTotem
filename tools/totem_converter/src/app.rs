@@ -346,10 +346,21 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
 
             ui.horizontal(|ui| {
                 if ui.button("📂 Chọn File Video / GIF...").clicked() {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Video & GIF", &["mp4", "gif", "webm", "avi", "mov", "mkv"])
-                        .pick_file()
-                    {
+                    let mut dialog = rfd::FileDialog::new()
+                        .add_filter("Video & GIF", &["mp4", "gif", "webm", "avi", "mov", "mkv"]);
+
+                    if let Some(ref p) = app.input_path {
+                        if let Some(parent) = p.parent() {
+                            dialog = dialog.set_directory(parent);
+                        }
+                    } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                        let downloads = PathBuf::from(&userprofile).join("Downloads");
+                        if downloads.exists() {
+                            dialog = dialog.set_directory(downloads);
+                        }
+                    }
+
+                    if let Some(path) = dialog.pick_file() {
                         app.load_file(path, ctx);
                     }
                 }
@@ -537,11 +548,25 @@ fn render_right_panel(ui: &mut Ui, app: &mut TotemApp) {
 
             if ui.add_enabled(can_export, egui::Button::new(RichText::new("💾 Xuất file PNG...").size(15.0).strong())).clicked() {
                 let default_name = format!("{}.png", app.totem_name.replace(' ', "_"));
-                if let Some(save_path) = rfd::FileDialog::new()
+                let mut dialog = rfd::FileDialog::new()
                     .add_filter("PNG Image", &["png"])
-                    .set_file_name(&default_name)
-                    .save_file()
-                {
+                    .set_file_name(&default_name);
+
+                // Smart default directory:
+                // 1. Same folder as the input video/gif
+                // 2. Pictures folder (safe and writable)
+                if let Some(ref p) = app.input_path {
+                    if let Some(parent) = p.parent() {
+                        dialog = dialog.set_directory(parent);
+                    }
+                } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                    let pic_dir = PathBuf::from(&userprofile).join("Pictures");
+                    if pic_dir.exists() {
+                        dialog = dialog.set_directory(pic_dir);
+                    }
+                }
+
+                if let Some(save_path) = dialog.save_file() {
                     app.export_png(save_path);
                 }
             }
