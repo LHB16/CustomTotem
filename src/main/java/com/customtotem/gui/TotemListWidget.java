@@ -54,8 +54,8 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
                     Text.literal(entry.isEnabled() ? "§a[Active]" : "§7[Off]"),
                     btn -> {
                         entry.setEnabled(!entry.isEnabled());
-                        TotemManager.getInstance().saveConfig();
-                        btn.setMessage(Text.literal(entry.isEnabled() ? "§a[Active]" : "§7[Off]"));
+                        TotemManager.getInstance().onEntryToggle(entry);
+                        screen.refreshList();
                     }
             ).dimensions(0, 0, 50, 20).build();
 
@@ -140,12 +140,17 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             // Draw Thumbnail: (texture, x1, y1, x2, y2, u0, u1, v0, v1)
             if (entry.getTextureId() != null) {
                 long tick = TotemManager.getInstance().getClientTicks();
-                float u0 = entry.getU0();
-                float u1 = entry.getU1();
-                float v0 = entry.getV0(tick);
-                float v1 = entry.getV1(tick);
+                float[] uvs = entry.getRenderUVs(tick);
+                float[] bounds = entry.getQuadBounds();
+                float boxSize = 24.0f;
+                int qx1 = (int) (x + 2 + bounds[0] * boxSize);
+                int qx2 = (int) (x + 2 + bounds[1] * boxSize);
+                int qy1 = (int) (y + 2 + (1.0f - bounds[3]) * boxSize);
+                int qy2 = (int) (y + 2 + (1.0f - bounds[2]) * boxSize);
 
-                context.drawTexturedQuad(entry.getTextureId(), x + 2, y + 2, x + 25, y + 26, u0, u1, v0, v1);
+                context.enableScissor(x + 2, y + 2, x + 26, y + 26);
+                context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, uvs[0], uvs[1], uvs[2], uvs[3]);
+                context.disableScissor();
             }
 
             // Text info

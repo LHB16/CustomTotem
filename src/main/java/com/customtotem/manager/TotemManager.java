@@ -166,13 +166,11 @@ public class TotemManager {
             }
         }
 
-        if (this.currentActiveTotem == null && !entries.isEmpty()) {
-            this.currentActiveTotem = getActiveEntries().stream().findFirst().orElse(entries.get(0));
+        if (this.currentActiveTotem == null || !this.currentActiveTotem.isEnabled()) {
+            this.currentActiveTotem = getActiveEntries().stream().findFirst().orElse(null);
         }
 
-        if (this.poppingTotem == null) {
-            this.poppingTotem = this.currentActiveTotem;
-        }
+        this.poppingTotem = this.currentActiveTotem;
 
         saveConfig();
     }
@@ -257,7 +255,7 @@ public class TotemManager {
         entries.remove(entry);
 
         if (currentActiveTotem == entry) {
-            currentActiveTotem = getActiveEntries().stream().findFirst().orElse(!entries.isEmpty() ? entries.get(0) : null);
+            currentActiveTotem = getActiveEntries().stream().findFirst().orElse(null);
         }
         if (poppingTotem == entry) {
             poppingTotem = currentActiveTotem;
@@ -268,14 +266,31 @@ public class TotemManager {
 
     public synchronized void setCurrentTotem(TotemEntry entry) {
         if (entry != null) {
-            this.currentActiveTotem = entry;
             entry.setEnabled(true);
+            this.currentActiveTotem = entry;
+            this.poppingTotem = entry;
             saveConfig();
         }
     }
 
+    public synchronized void onEntryToggle(TotemEntry entry) {
+        saveConfig();
+        List<TotemEntry> active = getActiveEntries();
+        if (active.isEmpty()) {
+            this.currentActiveTotem = null;
+            this.poppingTotem = null;
+        } else {
+            if (this.currentActiveTotem == null || !this.currentActiveTotem.isEnabled() || this.currentActiveTotem == entry) {
+                if (!entry.isEnabled()) {
+                    this.currentActiveTotem = active.get(0);
+                    this.poppingTotem = this.currentActiveTotem;
+                }
+            }
+        }
+    }
+
     public synchronized void onTotemPop() {
-        if (currentActiveTotem != null) {
+        if (hasCustomTotem()) {
             this.poppingTotem = this.currentActiveTotem;
             advanceNextTotem();
         }
@@ -383,6 +398,6 @@ public class TotemManager {
     }
 
     public boolean hasCustomTotem() {
-        return currentActiveTotem != null && currentActiveTotem.getTextureId() != null;
+        return !getActiveEntries().isEmpty() && currentActiveTotem != null && currentActiveTotem.isEnabled() && currentActiveTotem.getTextureId() != null;
     }
 }

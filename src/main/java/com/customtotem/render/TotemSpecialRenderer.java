@@ -32,10 +32,11 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
         }
 
         long tick = TotemManager.getInstance().getClientTicks();
-        final float u0 = entry.getU0();
-        final float u1 = entry.getU1();
-        final float v0 = entry.getV0(tick); // Top
-        final float v1 = entry.getV1(tick); // Bottom
+        float[] uvs = entry.getRenderUVs(tick);
+        final float u0 = uvs[0];
+        final float u1 = uvs[1];
+        final float v0 = uvs[2]; // Top
+        final float v1 = uvs[3]; // Bottom
 
         float[] bounds = entry.getQuadBounds();
         final float x0 = bounds[0];

@@ -124,61 +124,120 @@ public class TotemEntry {
     }
 
     public float getU0() {
-        return getTransform().isFlipX() ? 1.0f : 0.0f;
+        return getRenderUVs(0)[0];
     }
 
     public float getU1() {
-        return getTransform().isFlipX() ? 0.0f : 1.0f;
+        return getRenderUVs(0)[1];
     }
 
     public float getV0(long tick) {
-        float minV = getMinV(tick);
-        float maxV = getMaxV(tick);
-        return getTransform().isFlipY() ? maxV : minV;
+        return getRenderUVs(tick)[2];
     }
 
     public float getV1(long tick) {
-        float minV = getMinV(tick);
-        float maxV = getMaxV(tick);
-        return getTransform().isFlipY() ? minV : maxV;
+        return getRenderUVs(tick)[3];
     }
 
     /**
-     * Calculates model quad bounds [x0, x1, y0, y1] in [0, 1] item space
+     * Computes UV coordinates [u0, u1, v0, v1] taking into account:
+     * - Spritesheet frame animation
+     * - FitMode (FIT, STRETCH, FILL)
+     * - Zoom (scale)
+     * - Pan (offsetX, offsetY)
+     * - Flip (flipX, flipY)
+     */
+    public float[] getRenderUVs(long tick) {
+        TotemTextureTransform t = getTransform();
+        int frameH = (t.isAnimated() && frameCount > 1) ? height / frameCount : height;
+        float aspect = (float) width / (float) Math.max(1, frameH);
+
+        float scale = t.getScale();
+        float uSpan = 1.0f;
+        float vSpan = 1.0f;
+
+        if (t.getFitMode() == TotemTextureTransform.FitMode.FILL) {
+            if (aspect > 1.0f) {
+                uSpan = 1.0f / aspect;
+                vSpan = 1.0f;
+            } else if (aspect < 1.0f) {
+                uSpan = 1.0f;
+                vSpan = aspect;
+            }
+        }
+
+        if (scale > 1.0f) {
+            uSpan /= scale;
+            vSpan /= scale;
+        }
+
+        float uCenter = 0.5f - t.getOffsetX() * uSpan;
+        float vCenter = 0.5f + t.getOffsetY() * vSpan;
+
+        float rawU0 = uCenter - 0.5f * uSpan;
+        float rawU1 = uCenter + 0.5f * uSpan;
+        float rawV0 = vCenter - 0.5f * vSpan;
+        float rawV1 = vCenter + 0.5f * vSpan;
+
+        if (t.isFlipX()) {
+            float temp = rawU0;
+            rawU0 = rawU1;
+            rawU1 = temp;
+        }
+        if (t.isFlipY()) {
+            float temp = rawV0;
+            rawV0 = rawV1;
+            rawV1 = temp;
+        }
+
+        float frameMinV = getMinV(tick);
+        float frameHeight = getMaxV(tick) - frameMinV;
+
+        float finalV0 = frameMinV + rawV0 * frameHeight;
+        float finalV1 = frameMinV + rawV1 * frameHeight;
+
+        return new float[]{rawU0, rawU1, finalV0, finalV1};
+    }
+
+    /**
+     * Calculates model quad bounds [x0, x1, y0, y1] strictly bounded in item space
      */
     public float[] getQuadBounds() {
         TotemTextureTransform t = getTransform();
         int frameH = (t.isAnimated() && frameCount > 1) ? height / frameCount : height;
         float aspect = (float) width / (float) Math.max(1, frameH);
 
-        float widthScale = 1.0f;
-        float heightScale = 1.0f;
+        float baseW = 1.0f;
+        float baseH = 1.0f;
 
         if (t.getFitMode() == TotemTextureTransform.FitMode.FIT) {
             if (aspect > 1.0f) {
-                widthScale = 1.0f;
-                heightScale = 1.0f / aspect;
-            } else {
-                widthScale = aspect;
-                heightScale = 1.0f;
-            }
-        } else if (t.getFitMode() == TotemTextureTransform.FitMode.FILL) {
-            if (aspect > 1.0f) {
-                widthScale = aspect;
-                heightScale = 1.0f;
-            } else {
-                widthScale = 1.0f;
-                heightScale = 1.0f / aspect;
+                baseW = 1.0f;
+                baseH = 1.0f / aspect;
+            } else if (aspect < 1.0f) {
+                baseW = aspect;
+                baseH = 1.0f;
             }
         }
 
-        widthScale *= t.getScale();
-        heightScale *= t.getScale();
+        float scale = t.getScale();
+        float finalW = baseW;
+        float finalH = baseH;
 
-        float x0 = 0.5f - 0.5f * widthScale + t.getOffsetX();
-        float x1 = 0.5f + 0.5f * widthScale + t.getOffsetX();
-        float y0 = 0.5f - 0.5f * heightScale + t.getOffsetY();
-        float y1 = 0.5f + 0.5f * heightScale + t.getOffsetY();
+        float xOffset = 0.0f;
+        float yOffset = 0.0f;
+
+        if (scale <= 1.0f) {
+            finalW *= scale;
+            finalH *= scale;
+            xOffset = t.getOffsetX();
+            yOffset = t.getOffsetY();
+        }
+
+        float x0 = 0.5f - 0.5f * finalW + xOffset;
+        float x1 = 0.5f + 0.5f * finalW + xOffset;
+        float y0 = 0.5f - 0.5f * finalH + yOffset;
+        float y1 = 0.5f + 0.5f * finalH + yOffset;
 
         return new float[]{x0, x1, y0, y1};
     }

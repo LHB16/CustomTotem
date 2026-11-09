@@ -186,13 +186,11 @@ public class TextureAdjustScreen extends Screen {
             int qy2 = (int) (previewY + (1.0f - bounds[2]) * boxSize);
 
             long tick = TotemManager.getInstance().getClientTicks();
-            float u0 = entry.getU0();
-            float u1 = entry.getU1();
-            float v0 = entry.getV0(tick);
-            float v1 = entry.getV1(tick);
+            float[] uvs = entry.getRenderUVs(tick);
 
-            // Draw correctly oriented texture
-            context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, u0, u1, v0, v1);
+            context.enableScissor(previewX, previewY, previewX + boxSize, previewY + boxSize);
+            context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, uvs[0], uvs[1], uvs[2], uvs[3]);
+            context.disableScissor();
         }
 
         // Draw outline 1:1 canvas frame
