@@ -26,46 +26,60 @@ public class TotemManagerScreen extends Screen {
 
     @Override
     protected void init() {
-        int topBarY = 28;
-        int btnWidth = 105;
-        int spacing = 6;
-        int totalTopBarWidth = (btnWidth * 4) + (spacing * 3);
+        int topBarY = 24;
+        int btnSpacing = 4;
+        int btnCount = 5;
+        int btnWidth = Math.min(95, (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount);
+        int totalTopBarWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
         int startX = (this.width - totalTopBarWidth) / 2;
 
-        // Button 1: Upload Image (using TinyFileDialogs on background thread)
+        // Button 1: Folder Browser
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📁 Upload Image"),
-                btn -> openFileDialog()
+                Text.literal("📁 Folder"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new FolderBrowserScreen(this));
+                    }
+                }
         ).dimensions(startX, topBarY, btnWidth, 20).build());
 
-        // Button 2: Switch Totem Pop Mode (SINGLE / SEQUENTIAL / RANDOM)
+        // Button 2: Rescan current folder
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("🔄 Rescan"),
+                btn -> {
+                    TotemManager.getInstance().rescanImages();
+                    refreshList();
+                }
+        ).dimensions(startX + (btnWidth + btnSpacing), topBarY, btnWidth, 20).build());
+
+        // Button 3: Switch Totem Pop Mode (SINGLE / SEQUENTIAL / RANDOM)
         modeButton = ButtonWidget.builder(
                 getModeButtonText(),
                 btn -> {
                     TotemManager.getInstance().setMode(TotemManager.getInstance().getMode().next());
                     btn.setMessage(getModeButtonText());
                 }
-        ).dimensions(startX + (btnWidth + spacing), topBarY, btnWidth, 20).build();
+        ).dimensions(startX + (btnWidth + btnSpacing) * 2, topBarY, btnWidth, 20).build();
         this.addDrawableChild(modeButton);
 
-        // Button 3: Display Settings (Model / Mini Totem)
+        // Button 4: Display Settings (Model / Mini Totem)
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("⚙ Display Model"),
+                Text.literal("⚙ Display"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new DisplaySettingsScreen(this));
                     }
                 }
-        ).dimensions(startX + (btnWidth + spacing) * 2, topBarY, btnWidth, 20).build());
+        ).dimensions(startX + (btnWidth + btnSpacing) * 3, topBarY, btnWidth, 20).build());
 
-        // Button 4: Open Images Folder in Windows Explorer
+        // Button 5: Upload Image (using TinyFileDialogs on PC with fallback to FolderBrowser)
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📂 Open Folder"),
-                btn -> Util.getOperatingSystem().open(TotemManager.getInstance().getImagesDir())
-        ).dimensions(startX + (btnWidth + spacing) * 3, topBarY, btnWidth, 20).build());
+                Text.literal("+ Add Image"),
+                btn -> openFileDialog()
+        ).dimensions(startX + (btnWidth + btnSpacing) * 4, topBarY, btnWidth, 20).build());
 
         // Center List Widget
-        int listY = 56;
+        int listY = 62;
         int listHeight = this.height - listY - 38;
         this.listWidget = new TotemListWidget(this.client, this.width, listHeight, listY, 32, this);
         this.addDrawableChild(listWidget);
@@ -92,16 +106,22 @@ public class TotemManagerScreen extends Screen {
             try {
                 return TinyFileDialogs.tinyfd_openFileDialog(
                         "Select Totem PNG Image",
-                        "",
+                        TotemManager.getInstance().getImagesDir().toString(),
                         null,
                         "PNG Images (*.png)",
                         false
                 );
-            } catch (Exception e) {
-                return null;
+            } catch (Throwable t) {
+                return "__FALLBACK__";
             }
         }).thenAccept(filePath -> {
-            if (filePath != null && !filePath.trim().isEmpty()) {
+            if ("__FALLBACK__".equals(filePath)) {
+                MinecraftClient.getInstance().execute(() -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new FolderBrowserScreen(this));
+                    }
+                });
+            } else if (filePath != null && !filePath.trim().isEmpty()) {
                 Path path = Path.of(filePath);
                 MinecraftClient.getInstance().execute(() -> {
                     TotemManager.getInstance().addTotem(path);
@@ -144,23 +164,45 @@ public class TotemManagerScreen extends Screen {
         super.render(context, mouseX, mouseY, tickDelta);
 
         // Title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 10, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFF);
+
+        // Active Folder Label
+        Path activeFolder = TotemManager.getInstance().getImagesDir();
+        String folderName = activeFolder != null ? activeFolder.toString() : "Default";
+        if (this.textRenderer.getWidth("Folder: " + folderName) > this.width - 40) {
+            folderName = "..." + folderName.substring(Math.max(0, folderName.length() - 40));
+        }
+        String tag = TotemManager.getInstance().isUsingCustomImagesDir() ? "§e[Custom] " : "§7[Default] ";
+        context.drawCenteredTextWithShadow(
+                this.textRenderer,
+                Text.literal("Folder: " + tag + "§f" + folderName),
+                this.width / 2,
+                48,
+                0xAAAAAA
+        );
 
         // Empty state message
         if (TotemManager.getInstance().getEntries().isEmpty()) {
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§7No custom totems found. Click 'Upload Image' or drag PNG files here!"),
+                    Text.literal("§7No custom totems found in active folder."),
                     this.width / 2,
-                    this.height / 2 - 10,
+                    this.height / 2 - 12,
                     0xAAAAAA
+            );
+            context.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("§eClick '📁 Folder' to choose any folder (Downloads, Pictures, etc.)"),
+                    this.width / 2,
+                    this.height / 2 + 2,
+                    0xFFFF55
             );
         }
 
-        // Drag & drop hint at the bottom
+        // Hint at the bottom
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§8[Tip: Drag & Drop any .png image directly into this window!]"),
+                Text.literal("§8[Tip: Mobile: Click '📁 Folder' to select your photos. PC: Drag & Drop is supported!]"),
                 this.width / 2,
                 this.height - 36,
                 0x888888

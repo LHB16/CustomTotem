@@ -29,7 +29,8 @@ public class TotemManager {
     private static final TotemManager INSTANCE = new TotemManager();
 
     private final Path baseDir;
-    private final Path imagesDir;
+    private final Path defaultImagesDir;
+    private Path customImagesDir = null;
     private final Path configFile;
 
     private final List<TotemEntry> entries = new ArrayList<>();
@@ -44,7 +45,7 @@ public class TotemManager {
 
     private TotemManager() {
         this.baseDir = FabricLoader.getInstance().getConfigDir().resolve("custom_totems");
-        this.imagesDir = baseDir.resolve("images");
+        this.defaultImagesDir = baseDir.resolve("images");
         this.configFile = baseDir.resolve("config.json");
     }
 
@@ -54,11 +55,11 @@ public class TotemManager {
 
     public void init() {
         try {
-            if (!Files.exists(imagesDir)) {
-                Files.createDirectories(imagesDir);
+            if (!Files.exists(defaultImagesDir)) {
+                Files.createDirectories(defaultImagesDir);
             }
         } catch (Exception e) {
-            LOGGER.error("Failed to create custom totem directories", e);
+            LOGGER.error("Failed to create default custom totem directories", e);
         }
 
         TotemConfig loadedConfig = loadConfigFile();
@@ -66,6 +67,16 @@ public class TotemManager {
             this.mode = loadedConfig.mode != null ? loadedConfig.mode : TotemMode.SEQUENTIAL;
             if (loadedConfig.displaySettings != null) {
                 this.displaySettings = loadedConfig.displaySettings;
+            }
+            if (loadedConfig.customImagesDir != null && !loadedConfig.customImagesDir.trim().isEmpty()) {
+                try {
+                    Path customPath = Path.of(loadedConfig.customImagesDir);
+                    if (Files.exists(customPath) && Files.isDirectory(customPath)) {
+                        this.customImagesDir = customPath.toAbsolutePath().normalize();
+                    }
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to resolve custom images dir: {}", loadedConfig.customImagesDir, e);
+                }
             }
         }
 
@@ -88,6 +99,7 @@ public class TotemManager {
         TotemConfig config = new TotemConfig();
         config.mode = this.mode;
         config.currentTotemId = this.currentActiveTotem != null ? this.currentActiveTotem.getId() : null;
+        config.customImagesDir = this.customImagesDir != null ? this.customImagesDir.toAbsolutePath().toString() : null;
         config.displaySettings = this.displaySettings;
 
         for (TotemEntry entry : entries) {
@@ -133,11 +145,20 @@ public class TotemManager {
         }
 
         List<Path> imageFiles = new ArrayList<>();
-        try (Stream<Path> stream = Files.list(imagesDir)) {
+        Path activeDir = getImagesDir();
+        try {
+            if (!Files.exists(activeDir)) {
+                Files.createDirectories(activeDir);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to ensure images directory: {}", activeDir, e);
+        }
+
+        try (Stream<Path> stream = Files.list(activeDir)) {
             stream.filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png"))
                   .forEach(imageFiles::add);
         } catch (Exception e) {
-            LOGGER.error("Failed to list totem images", e);
+            LOGGER.error("Failed to list totem images from {}", activeDir, e);
         }
 
         // Sort imageFiles based on orderList if present
@@ -215,11 +236,12 @@ public class TotemManager {
             return null;
         }
 
-        Path target = imagesDir.resolve(fileName);
+        Path activeDir = getImagesDir();
+        Path target = activeDir.resolve(fileName);
         int counter = 1;
         while (Files.exists(target)) {
             String base = fileName.substring(0, fileName.length() - 4);
-            target = imagesDir.resolve(base + "_" + counter + ".png");
+            target = activeDir.resolve(base + "_" + counter + ".png");
             counter++;
         }
 
@@ -246,7 +268,7 @@ public class TotemManager {
         entry.close();
 
         try {
-            Path file = imagesDir.resolve(entry.getFileName());
+            Path file = getImagesDir().resolve(entry.getFileName());
             Files.deleteIfExists(file);
         } catch (Exception e) {
             LOGGER.error("Failed to delete totem file: {}", entry.getFileName(), e);
@@ -394,7 +416,44 @@ public class TotemManager {
     }
 
     public Path getImagesDir() {
-        return imagesDir;
+        if (customImagesDir != null && Files.exists(customImagesDir) && Files.isDirectory(customImagesDir)) {
+            return customImagesDir;
+        }
+        return defaultImagesDir;
+    }
+
+    public Path getDefaultImagesDir() {
+        return defaultImagesDir;
+    }
+
+    public Path getCustomImagesDir() {
+        return customImagesDir;
+    }
+
+    public boolean isUsingCustomImagesDir() {
+        return customImagesDir != null && Files.exists(customImagesDir);
+    }
+
+    public synchronized void setCustomImagesDir(Path newDir) {
+        if (newDir != null) {
+            try {
+                if (!Files.exists(newDir)) {
+                    Files.createDirectories(newDir);
+                }
+                this.customImagesDir = newDir.toAbsolutePath().normalize();
+            } catch (Exception e) {
+                LOGGER.error("Failed to set custom images dir: {}", newDir, e);
+                return;
+            }
+        } else {
+            this.customImagesDir = null;
+        }
+        saveConfig();
+        reloadAllTextures(loadConfigFile());
+    }
+
+    public synchronized void rescanImages() {
+        reloadAllTextures(loadConfigFile());
     }
 
     public boolean hasCustomTotem() {

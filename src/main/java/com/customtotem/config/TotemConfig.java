@@ -31,6 +31,7 @@ public class TotemConfig {
 
     public TotemMode mode = TotemMode.SEQUENTIAL;
     public String currentTotemId = null;
+    public String customImagesDir = null;
     public List<TotemEntryConfig> entries = new ArrayList<>();
     public TotemDisplaySettings displaySettings = new TotemDisplaySettings();
 
