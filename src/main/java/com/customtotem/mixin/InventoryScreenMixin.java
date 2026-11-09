@@ -2,6 +2,7 @@ package com.customtotem.mixin;
 
 import com.customtotem.manager.TotemManager;
 import com.customtotem.model.InventoryGuiSettings;
+import com.customtotem.render.InventoryGuiRenderer;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.InventoryScreen;
@@ -29,16 +30,15 @@ public abstract class InventoryScreenMixin extends RecipeBookScreen<PlayerScreen
         if (settings != null && settings.isEnabled()) {
             Identifier customTexture = TotemManager.getInstance().getInventoryGuiTexture();
             if (customTexture != null) {
-                int alpha = Math.max(25, Math.min(255, (int) (settings.getOpacity() * 255)));
-                int color = (alpha << 24) | 0x00FFFFFF;
+                int imgW = TotemManager.getInstance().getInventoryGuiImageWidth();
+                int imgH = TotemManager.getInstance().getInventoryGuiImageHeight();
 
                 if (settings.getMode() == InventoryGuiSettings.Mode.FULLSCREEN) {
-                    context.drawTexture(RenderPipelines.GUI_TEXTURED, customTexture,
-                            0, 0, 0.0f, 0.0f, this.width, this.height, this.width, this.height, color);
+                    InventoryGuiRenderer.renderBackground(context, customTexture, imgW, imgH,
+                            0, 0, this.width, this.height, settings);
                 } else {
-                    context.drawTexture(RenderPipelines.GUI_TEXTURED, customTexture,
-                            this.x, this.y, 0.0f, 0.0f, this.backgroundWidth, this.backgroundHeight,
-                            this.backgroundWidth, this.backgroundHeight, color);
+                    InventoryGuiRenderer.renderBackground(context, customTexture, imgW, imgH,
+                            this.x, this.y, this.backgroundWidth, this.backgroundHeight, settings);
                 }
 
                 if (settings.isShowVanillaSlots()) {
@@ -48,7 +48,7 @@ public abstract class InventoryScreenMixin extends RecipeBookScreen<PlayerScreen
                     context.drawTexture(RenderPipelines.GUI_TEXTURED,
                             Identifier.ofVanilla("textures/gui/container/inventory.png"),
                             this.x, this.y, 0.0f, 0.0f, this.backgroundWidth, this.backgroundHeight,
-                            256, 256, slotColor);
+                            176, 166, 256, 256, slotColor);
                 }
 
                 // Render the player model preview

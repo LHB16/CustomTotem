@@ -2,9 +2,12 @@ package com.customtotem.gui;
 
 import com.customtotem.manager.TotemManager;
 import com.customtotem.model.InventoryGuiSettings;
+import com.customtotem.render.InventoryGuiRenderer;
 import net.minecraft.client.gl.RenderPipelines;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.text.Text;
@@ -12,15 +15,29 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
 
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public class InventoryGuiSettingsScreen extends Screen {
+    private static final int INV_WIDTH = 176;
+    private static final int INV_HEIGHT = 166;
+
     private final Screen parent;
     private final InventoryGuiSettings settings;
 
     private ButtonWidget toggleButton;
+    private ButtonWidget selectImageButton;
+    private ButtonWidget fitModeButton;
     private ButtonWidget modeButton;
     private ButtonWidget slotsOverlayButton;
-    private ButtonWidget selectImageButton;
+    private CustomSliderWidget opacitySlider;
+    private CustomSliderWidget zoomSlider;
+    private CustomSliderWidget offsetXSlider;
+    private CustomSliderWidget offsetYSlider;
+
+    private int previewBoxX = 0;
+    private int previewBoxY = 0;
+    private boolean isDraggingPreview = false;
 
     public InventoryGuiSettingsScreen(Screen parent) {
         super(Text.literal("Cài Đặt Ảnh Nền Túi Đồ (Inventory GUI)"));
@@ -32,12 +49,21 @@ public class InventoryGuiSettingsScreen extends Screen {
     protected void init() {
         TotemManager.getInstance().scanInventoryImages();
 
-        int centerX = this.width / 2;
-        int startY = 36;
-        int fullWidth = 240;
-        int rowGap = 24;
+        int minSideBySideWidth = 390;
+        boolean sideBySide = this.width >= minSideBySideWidth;
 
-        // Button 1: Toggle Enabled
+        int controlsW = sideBySide ? 190 : Math.min(220, this.width - 20);
+        int totalW = sideBySide ? (controlsW + 16 + INV_WIDTH) : Math.max(controlsW, INV_WIDTH);
+        int startX = (this.width - totalW) / 2;
+
+        int controlsX = startX;
+        int controlsY = 24;
+        int rowGap = 21;
+
+        previewBoxX = sideBySide ? (startX + controlsW + 16) : ((this.width - INV_WIDTH) / 2);
+        previewBoxY = sideBySide ? Math.max(24, (this.height - INV_HEIGHT) / 2) : (controlsY + (rowGap * 9) + 4);
+
+        // Row 0: Toggle Enabled
         toggleButton = ButtonWidget.builder(
                 getToggleText(),
                 btn -> {
@@ -45,45 +71,52 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                     btn.setMessage(getToggleText());
                 }
-        ).dimensions(centerX - 120, startY, fullWidth, 20).build();
+        ).dimensions(controlsX, controlsY, controlsW, 20).build();
         this.addDrawableChild(toggleButton);
 
-        // Button 2: Select / Cycle Image
-        List<String> images = TotemManager.getInstance().getAvailableInventoryImages();
-        int cycleBtnWidth = 24;
-        int imgSelectWidth = fullWidth - (cycleBtnWidth * 2) - 4;
+        // Row 1: Image Selection (◀, [Tên], ▶)
+        int cycleBtnWidth = 20;
+        int imgSelectWidth = controlsW - (cycleBtnWidth * 2) - 4;
 
-        // Prev Image Button
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("◀"),
                 btn -> cycleImage(-1)
-        ).dimensions(centerX - 120, startY + rowGap, cycleBtnWidth, 20).build());
+        ).dimensions(controlsX, controlsY + rowGap, cycleBtnWidth, 20).build());
 
-        // Image Name Button (Click to next)
         selectImageButton = ButtonWidget.builder(
                 getImageButtonText(),
                 btn -> cycleImage(1)
-        ).dimensions(centerX - 120 + cycleBtnWidth + 2, startY + rowGap, imgSelectWidth, 20).build();
+        ).dimensions(controlsX + cycleBtnWidth + 2, controlsY + rowGap, imgSelectWidth, 20).build();
         this.addDrawableChild(selectImageButton);
 
-        // Next Image Button
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("▶"),
                 btn -> cycleImage(1)
-        ).dimensions(centerX + 120 - cycleBtnWidth, startY + rowGap, cycleBtnWidth, 20).build());
+        ).dimensions(controlsX + controlsW - cycleBtnWidth, controlsY + rowGap, cycleBtnWidth, 20).build());
 
-        // Button 3: Display Mode (FRAME / FULLSCREEN)
+        // Row 2: Fit / Crop Mode (CROP, STRETCH, FIT)
+        fitModeButton = ButtonWidget.builder(
+                getFitModeText(),
+                btn -> {
+                    settings.setFitMode(settings.getFitMode().next());
+                    TotemManager.getInstance().saveConfig();
+                    btn.setMessage(getFitModeText());
+                }
+        ).dimensions(controlsX, controlsY + rowGap * 2, controlsW, 20).build();
+        this.addDrawableChild(fitModeButton);
+
+        // Row 3: Display Mode (FRAME / FULLSCREEN)
         modeButton = ButtonWidget.builder(
-                Text.literal("Chế độ: §b" + settings.getMode().getDisplayName()),
+                getModeText(),
                 btn -> {
                     settings.setMode(settings.getMode().next());
                     TotemManager.getInstance().saveConfig();
-                    btn.setMessage(Text.literal("Chế độ: §b" + settings.getMode().getDisplayName()));
+                    btn.setMessage(getModeText());
                 }
-        ).dimensions(centerX - 120, startY + (rowGap * 2), fullWidth, 20).build();
+        ).dimensions(controlsX, controlsY + rowGap * 3, controlsW, 20).build();
         this.addDrawableChild(modeButton);
 
-        // Button 4: Vanilla Slots Overlay
+        // Row 4: Vanilla Slots Overlay
         slotsOverlayButton = ButtonWidget.builder(
                 getSlotsOverlayText(),
                 btn -> {
@@ -91,49 +124,110 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                     btn.setMessage(getSlotsOverlayText());
                 }
-        ).dimensions(centerX - 120, startY + (rowGap * 3), fullWidth, 20).build();
+        ).dimensions(controlsX, controlsY + rowGap * 4, controlsW, 20).build();
         this.addDrawableChild(slotsOverlayButton);
 
-        // Slider: Opacity (10% to 100%)
-        this.addDrawableChild(new SliderWidget(
-                centerX - 120, startY + (rowGap * 4), fullWidth, 20,
-                Text.literal(String.format("Độ mờ: §a%d%%", Math.round(settings.getOpacity() * 100))),
-                (settings.getOpacity() - 0.1) / (1.0 - 0.1)
-        ) {
-            @Override
-            protected void updateMessage() {
-                setMessage(Text.literal(String.format("Độ mờ: §a%d%%", Math.round(settings.getOpacity() * 100))));
-            }
+        // Row 5: Opacity Slider (10% to 100%)
+        opacitySlider = new CustomSliderWidget(
+                controlsX, controlsY + rowGap * 5, controlsW, 20,
+                getOpacityText(),
+                (settings.getOpacity() - 0.1) / 0.9,
+                this::getOpacityText,
+                val -> {
+                    float opacity = (float) (0.1 + val * 0.9);
+                    settings.setOpacity(Math.round(opacity * 100.0f) / 100.0f);
+                    TotemManager.getInstance().saveConfig();
+                }
+        );
+        this.addDrawableChild(opacitySlider);
 
-            @Override
-            protected void applyValue() {
-                float val = (float) (0.1 + this.value * 0.9);
-                settings.setOpacity(Math.round(val * 100.0f) / 100.0f);
-                TotemManager.getInstance().saveConfig();
-            }
-        });
+        // Row 6: Zoom / Scale Slider (0.5x to 3.0x)
+        zoomSlider = new CustomSliderWidget(
+                controlsX, controlsY + rowGap * 6, controlsW, 20,
+                getZoomText(),
+                (settings.getScale() - 0.5) / 2.5,
+                this::getZoomText,
+                val -> {
+                    float scale = (float) (0.5 + val * 2.5);
+                    settings.setScale(Math.round(scale * 100.0f) / 100.0f);
+                    TotemManager.getInstance().saveConfig();
+                }
+        );
+        this.addDrawableChild(zoomSlider);
 
-        // Row 5: Open Folder & Rescan
-        int halfWidth = 118;
+        // Row 7: Offset X and Offset Y Sliders (Side-by-side, -1.0 to 1.0)
+        int halfW = (controlsW - 4) / 2;
+        offsetXSlider = new CustomSliderWidget(
+                controlsX, controlsY + rowGap * 7, halfW, 20,
+                getOffsetXText(),
+                (settings.getOffsetX() - (-1.0)) / 2.0,
+                this::getOffsetXText,
+                val -> {
+                    float offX = (float) (-1.0 + val * 2.0);
+                    settings.setOffsetX(Math.round(offX * 100.0f) / 100.0f);
+                    TotemManager.getInstance().saveConfig();
+                }
+        );
+        this.addDrawableChild(offsetXSlider);
+
+        offsetYSlider = new CustomSliderWidget(
+                controlsX + halfW + 4, controlsY + rowGap * 7, halfW, 20,
+                getOffsetYText(),
+                (settings.getOffsetY() - (-1.0)) / 2.0,
+                this::getOffsetYText,
+                val -> {
+                    float offY = (float) (-1.0 + val * 2.0);
+                    settings.setOffsetY(Math.round(offY * 100.0f) / 100.0f);
+                    TotemManager.getInstance().saveConfig();
+                }
+        );
+        this.addDrawableChild(offsetYSlider);
+
+        // Row 8: Action Buttons (Reset, Thư Mục, Quét Lại)
+        int btn3W = (controlsW - 8) / 3;
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📁 Mở Thư Mục"),
+                Text.literal("🔄 Reset"),
+                btn -> {
+                    settings.resetTransform();
+                    TotemManager.getInstance().saveConfig();
+                    updateSliders();
+                    if (fitModeButton != null) fitModeButton.setMessage(getFitModeText());
+                }
+        ).dimensions(controlsX, controlsY + rowGap * 8, btn3W, 20).build());
+
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("📁 Mở"),
                 btn -> Util.getOperatingSystem().open(TotemManager.getInstance().getInventoryGuiDir())
-        ).dimensions(centerX - 120, startY + (rowGap * 5), halfWidth, 20).build());
+        ).dimensions(controlsX + btn3W + 4, controlsY + rowGap * 8, btn3W, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🔄 Quét Lại"),
+                Text.literal("🔃 Quét"),
                 btn -> {
                     TotemManager.getInstance().scanInventoryImages();
                     TotemManager.getInstance().loadInventoryGuiTexture();
-                    selectImageButton.setMessage(getImageButtonText());
+                    if (selectImageButton != null) {
+                        selectImageButton.setMessage(getImageButtonText());
+                    }
                 }
-        ).dimensions(centerX + 2, startY + (rowGap * 5), halfWidth, 20).build());
+        ).dimensions(controlsX + (btn3W + 4) * 2, controlsY + rowGap * 8, btn3W, 20).build());
 
-        // Back button
+        // Row 9: Back Button
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("Quay lại (Back)"),
                 btn -> this.close()
-        ).dimensions(centerX - 120, this.height - 28, fullWidth, 20).build());
+        ).dimensions(controlsX, controlsY + rowGap * 9, controlsW, 20).build());
+    }
+
+    private void updateSliders() {
+        if (zoomSlider != null) {
+            zoomSlider.setNormalizedValue((settings.getScale() - 0.5) / 2.5);
+        }
+        if (offsetXSlider != null) {
+            offsetXSlider.setNormalizedValue((settings.getOffsetX() - (-1.0)) / 2.0);
+        }
+        if (offsetYSlider != null) {
+            offsetYSlider.setNormalizedValue((settings.getOffsetY() - (-1.0)) / 2.0);
+        }
     }
 
     private void cycleImage(int delta) {
@@ -159,11 +253,35 @@ public class InventoryGuiSettingsScreen extends Screen {
     }
 
     private Text getToggleText() {
-        return Text.literal("Custom GUI Túi Đồ: " + (settings.isEnabled() ? "§aBẬT" : "§cTẮT"));
+        return Text.literal("Custom Túi Đồ: " + (settings.isEnabled() ? "§aBẬT" : "§cTẮT"));
+    }
+
+    private Text getFitModeText() {
+        return Text.literal("Căn ảnh: §e" + settings.getFitMode().getDisplayName());
+    }
+
+    private Text getModeText() {
+        return Text.literal("Chế độ: §b" + settings.getMode().getDisplayName());
     }
 
     private Text getSlotsOverlayText() {
-        return Text.literal("Khung Ô Đồ (Vanilla Slots): " + (settings.isShowVanillaSlots() ? "§aHIỆN" : "§7ẨN"));
+        return Text.literal("Khung Ô Đồ: " + (settings.isShowVanillaSlots() ? "§aHIỆN" : "§7ẨN"));
+    }
+
+    private Text getOpacityText() {
+        return Text.literal(String.format("Độ mờ: §a%d%%", Math.round(settings.getOpacity() * 100)));
+    }
+
+    private Text getZoomText() {
+        return Text.literal(String.format("Zoom: §b%.2fx", settings.getScale()));
+    }
+
+    private Text getOffsetXText() {
+        return Text.literal(String.format("X: §b%.2f", settings.getOffsetX()));
+    }
+
+    private Text getOffsetYText() {
+        return Text.literal(String.format("Y: §b%.2f", settings.getOffsetY()));
     }
 
     private Text getImageButtonText() {
@@ -171,14 +289,62 @@ public class InventoryGuiSettingsScreen extends Screen {
         if (name == null || name.trim().isEmpty()) {
             List<String> list = TotemManager.getInstance().getAvailableInventoryImages();
             if (list.isEmpty()) {
-                return Text.literal("§7[Chưa có ảnh trong thư mục]");
+                return Text.literal("§7[Chưa có ảnh]");
             }
-            return Text.literal("§eBấm để chọn ảnh (" + list.size() + ")");
+            return Text.literal("§eChọn ảnh (" + list.size() + ")");
         }
-        if (name.length() > 22) {
-            name = name.substring(0, 19) + "...";
+        if (name.length() > 16) {
+            name = name.substring(0, 13) + "...";
         }
-        return Text.literal("Ảnh: §e" + name);
+        return Text.literal("§e" + name);
+    }
+
+    @Override
+    public boolean mouseClicked(Click click, boolean doubled) {
+        if (click.button() == 0 && isInsidePreview(click.x(), click.y())) {
+            isDraggingPreview = true;
+            return true;
+        }
+        return super.mouseClicked(click, doubled);
+    }
+
+    @Override
+    public boolean mouseReleased(Click click) {
+        if (click.button() == 0 && isDraggingPreview) {
+            isDraggingPreview = false;
+            return true;
+        }
+        return super.mouseReleased(click);
+    }
+
+    @Override
+    public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+        if (isDraggingPreview) {
+            float stepX = (float) deltaX / (INV_WIDTH * 0.5f);
+            float stepY = (float) deltaY / (INV_HEIGHT * 0.5f);
+            settings.setOffsetX(settings.getOffsetX() + stepX);
+            settings.setOffsetY(settings.getOffsetY() + stepY);
+            updateSliders();
+            TotemManager.getInstance().saveConfig();
+            return true;
+        }
+        return super.mouseDragged(click, deltaX, deltaY);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (isInsidePreview(mouseX, mouseY)) {
+            float zoomDelta = (float) (verticalAmount * 0.1);
+            settings.setScale(Math.round((settings.getScale() + zoomDelta) * 20.0f) / 20.0f);
+            updateSliders();
+            TotemManager.getInstance().saveConfig();
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+
+    private boolean isInsidePreview(double x, double y) {
+        return x >= previewBoxX && x <= previewBoxX + INV_WIDTH && y >= previewBoxY && y <= previewBoxY + INV_HEIGHT;
     }
 
     @Override
@@ -192,40 +358,98 @@ public class InventoryGuiSettingsScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float tickDelta) {
         super.render(context, mouseX, mouseY, tickDelta);
 
-        // Header
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 14, 0xFFFFFF);
+        // Header Title
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFF);
 
-        // Preview box
-        int centerX = this.width / 2;
-        int previewY = 36 + (24 * 6) + 4;
-        int previewH = Math.max(20, this.height - previewY - 36);
-        int previewW = Math.round(previewH * (176.0f / 166.0f));
-        int previewX = centerX - (previewW / 2);
+        // Preview Box (176 x 166 - Actual Minecraft Inventory Size)
+        int px = previewBoxX;
+        int py = previewBoxY;
 
-        if (previewH >= 30) {
-            // Background box
-            context.fill(previewX - 2, previewY - 2, previewX + previewW + 2, previewY + previewH + 2, 0x88000000);
+        // Label above preview
+        context.drawCenteredTextWithShadow(this.textRenderer,
+                Text.literal("§6Túi Đồ Thật (176x166)"),
+                px + INV_WIDTH / 2, py - 12, 0xFFD700);
 
-            Identifier texture = TotemManager.getInstance().getInventoryGuiTexture();
-            if (texture != null && settings.isEnabled()) {
-                int alpha = Math.max(25, Math.min(255, (int) (settings.getOpacity() * 255)));
-                int color = (alpha << 24) | 0x00FFFFFF;
-                context.drawTexture(RenderPipelines.GUI_TEXTURED, texture,
-                        previewX, previewY, 0.0f, 0.0f, previewW, previewH,
-                        previewW, previewH, color);
+        // Frame Border and Background
+        context.fill(px - 2, py - 2, px + INV_WIDTH + 2, py + INV_HEIGHT + 2, 0xFF444444);
+        context.fill(px, py, px + INV_WIDTH, py + INV_HEIGHT, 0xFF141414);
 
-                if (settings.isShowVanillaSlots()) {
-                    int slotColor = (150 << 24) | 0x00FFFFFF;
-                    context.drawTexture(RenderPipelines.GUI_TEXTURED,
-                            Identifier.ofVanilla("textures/gui/container/inventory.png"),
-                            previewX, previewY, 0.0f, 0.0f, previewW, previewH,
-                            256, 256, slotColor);
-                }
-            } else {
-                context.drawCenteredTextWithShadow(this.textRenderer,
-                        Text.literal("§7[Xem trước nền túi đồ]"),
-                        centerX, previewY + (previewH / 2) - 4, 0xAAAAAA);
+        Identifier texture = TotemManager.getInstance().getInventoryGuiTexture();
+        int imgW = TotemManager.getInstance().getInventoryGuiImageWidth();
+        int imgH = TotemManager.getInstance().getInventoryGuiImageHeight();
+
+        if (texture != null && settings.isEnabled()) {
+            // Render custom texture with selected crop/fit mode, scale & offsets
+            InventoryGuiRenderer.renderBackground(context, texture, imgW, imgH, px, py, INV_WIDTH, INV_HEIGHT, settings);
+
+            if (settings.isShowVanillaSlots()) {
+                int slotColor = (180 << 24) | 0x00FFFFFF;
+                context.drawTexture(RenderPipelines.GUI_TEXTURED,
+                        Identifier.ofVanilla("textures/gui/container/inventory.png"),
+                        px, py, 0.0f, 0.0f, INV_WIDTH, INV_HEIGHT,
+                        INV_WIDTH, INV_HEIGHT, 256, 256, slotColor);
             }
+
+            // Real player model preview
+            if (this.client != null && this.client.player != null) {
+                InventoryScreen.drawEntity(context, px + 26, py + 8, px + 75, py + 78,
+                        30, 0.0625f, (float) mouseX, (float) mouseY, this.client.player);
+            }
+        } else {
+            // Fallback preview when disabled or no texture selected
+            if (settings.isShowVanillaSlots()) {
+                context.drawTexture(RenderPipelines.GUI_TEXTURED,
+                        Identifier.ofVanilla("textures/gui/container/inventory.png"),
+                        px, py, 0.0f, 0.0f, INV_WIDTH, INV_HEIGHT,
+                        INV_WIDTH, INV_HEIGHT, 256, 256, 0xFFFFFFFF);
+
+                if (this.client != null && this.client.player != null) {
+                    InventoryScreen.drawEntity(context, px + 26, py + 8, px + 75, py + 78,
+                            30, 0.0625f, (float) mouseX, (float) mouseY, this.client.player);
+                }
+            }
+
+            Text statusText = !settings.isEnabled()
+                    ? Text.literal("§c[Túi đồ custom đang TẮT]")
+                    : Text.literal("§7[Chưa chọn hình ảnh]");
+            context.drawCenteredTextWithShadow(this.textRenderer, statusText,
+                    px + INV_WIDTH / 2, py + INV_HEIGHT / 2 - 4, 0xAAAAAA);
+        }
+
+        // Subtitle / Drag hint below preview
+        context.drawCenteredTextWithShadow(this.textRenderer,
+                Text.literal("§8🖱 Kéo chuột để dịch • Lăn để Zoom"),
+                px + INV_WIDTH / 2, py + INV_HEIGHT + 4, 0x888888);
+    }
+
+    private static class CustomSliderWidget extends SliderWidget {
+        private final Consumer<Double> onApply;
+        private final Supplier<Text> messageSupplier;
+
+        public CustomSliderWidget(int x, int y, int width, int height, Text text, double value,
+                                  Supplier<Text> messageSupplier, Consumer<Double> onApply) {
+            super(x, y, width, height, text, value);
+            this.messageSupplier = messageSupplier;
+            this.onApply = onApply;
+        }
+
+        @Override
+        protected void updateMessage() {
+            if (messageSupplier != null) {
+                setMessage(messageSupplier.get());
+            }
+        }
+
+        @Override
+        protected void applyValue() {
+            if (onApply != null) {
+                onApply.accept(this.value);
+            }
+        }
+
+        public void setNormalizedValue(double val) {
+            this.value = Math.max(0.0, Math.min(1.0, val));
+            updateMessage();
         }
     }
 }

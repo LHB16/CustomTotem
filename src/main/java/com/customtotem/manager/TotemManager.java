@@ -56,6 +56,8 @@ public class TotemManager {
     private InventoryGuiSettings inventoryGuiSettings = new InventoryGuiSettings();
     private Identifier inventoryGuiTextureId = null;
     private NativeImageBackedTexture inventoryGuiTexture = null;
+    private int inventoryGuiImageWidth = 0;
+    private int inventoryGuiImageHeight = 0;
     private final List<String> availableInventoryImages = new ArrayList<>();
 
     private boolean renderingFloatingItem = false;
@@ -997,9 +999,19 @@ public class TotemManager {
         saveConfig();
     }
 
+    public int getInventoryGuiImageWidth() {
+        return inventoryGuiImageWidth;
+    }
+
+    public int getInventoryGuiImageHeight() {
+        return inventoryGuiImageHeight;
+    }
+
     public void loadInventoryGuiTexture() {
         String fileName = inventoryGuiSettings.getImageFileName();
         if (fileName == null || fileName.trim().isEmpty()) {
+            this.inventoryGuiImageWidth = 0;
+            this.inventoryGuiImageHeight = 0;
             return;
         }
 
@@ -1009,11 +1021,15 @@ public class TotemManager {
         }
         if (!Files.exists(imgPath)) {
             LOGGER.warn("Inventory GUI image file not found: {}", fileName);
+            this.inventoryGuiImageWidth = 0;
+            this.inventoryGuiImageHeight = 0;
             return;
         }
 
         try (InputStream in = Files.newInputStream(imgPath)) {
             NativeImage image = NativeImage.read(in);
+            this.inventoryGuiImageWidth = image.getWidth();
+            this.inventoryGuiImageHeight = image.getHeight();
             Identifier id = Identifier.of("customtotem", "inventory_gui_" + Math.abs(fileName.hashCode()));
             NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/inventory_gui", image);
 
