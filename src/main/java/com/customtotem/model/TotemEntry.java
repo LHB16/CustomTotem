@@ -216,6 +216,48 @@ public class TotemEntry {
         }
     }
 
+    public float getEstimatedVramMb() {
+        TotemTextureTransform t = getTransform();
+        int res = t != null ? t.getResolution() : 0;
+        return calculateVramMb(res);
+    }
+
+    public float calculateVramMb(int targetRes) {
+        long totalW = width;
+        long totalH = height;
+        if (targetRes > 0 && width > 0 && height > 0) {
+            int safeCols = Math.max(1, columns);
+            int safeRows = Math.max(1, rows);
+            int origFrameW = width / safeCols;
+            int origFrameH = height / safeRows;
+            int targetFrameW = targetRes;
+            int targetFrameH = (int) Math.max(1, Math.round((float) targetRes * (float) origFrameH / (float) Math.max(1, origFrameW)));
+            totalW = (long) targetFrameW * safeCols;
+            totalH = (long) targetFrameH * safeRows;
+        }
+        long bytes = totalW * totalH * 4L;
+        return (float) bytes / (1024.0f * 1024.0f);
+    }
+
+    public boolean isVramHigh() {
+        return getEstimatedVramMb() > 16.0f || width > 4096 || height > 4096;
+    }
+
+    public boolean isVramCritical() {
+        return getEstimatedVramMb() > 32.0f || width > 8192 || height > 8192;
+    }
+
+    public String getVramBadge() {
+        float mb = getEstimatedVramMb();
+        if (isVramCritical()) {
+            return String.format("§c⚠ %.1fMB VRAM", mb);
+        } else if (isVramHigh()) {
+            return String.format("§e⚠ %.1fMB VRAM", mb);
+        } else {
+            return String.format("§a%.1fMB", mb);
+        }
+    }
+
     public float getMinV(long tick) {
         return getRenderUVs(tick)[2];
     }

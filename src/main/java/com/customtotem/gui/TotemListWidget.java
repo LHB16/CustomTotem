@@ -177,6 +177,11 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             // Text info
             String name = entry.getDisplayName();
+            if (entry.isVramCritical()) {
+                name = "§c⚠ " + name;
+            } else if (entry.isVramHigh()) {
+                name = "§e⚠ " + name;
+            }
             if (textRenderer.getWidth(name) > 130) {
                 name = textRenderer.trimToWidth(name, 120) + "...";
             }
@@ -184,12 +189,12 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             String info = entry.getWidth() + "x" + entry.getHeight();
             if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
-                info += " (" + entry.getFrameCount() + "f @" + entry.getFps() + "fps)";
-                if (entry.getColumns() > 1) {
-                    info += " §b[" + entry.getColumns() + "x" + entry.getRows() + " Grid]";
-                }
+                info += " (" + entry.getFrameCount() + "f)";
             }
-            if (entry.getTransform().getScale() != 1.0f || entry.getTransform().getOffsetX() != 0.0f || entry.getTransform().getOffsetY() != 0.0f) {
+            info += " " + entry.getVramBadge();
+            if (entry.getTransform().getResolution() > 0) {
+                info += " §b[" + entry.getTransform().getResolution() + "x]";
+            } else if (entry.getTransform().getScale() != 1.0f || entry.getTransform().getOffsetX() != 0.0f || entry.getTransform().getOffsetY() != 0.0f) {
                 info += " §e[Custom]";
             }
             context.drawTextWithShadow(textRenderer, Text.literal(info), x + 30, y + 16, 0x888888);

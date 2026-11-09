@@ -38,10 +38,20 @@ public class TextureAdjustScreen extends Screen {
     }
 
     private Text getResolutionMessage(int res) {
-        if (res <= 0) {
-            return Text.literal("Resolution: §eNative (Gốc)");
+        float vram = entry.calculateVramMb(res);
+        String vramStr;
+        if (vram > 32.0f) {
+            vramStr = String.format("§c(%.1fMB VRAM - Cao!)", vram);
+        } else if (vram > 16.0f) {
+            vramStr = String.format("§e(%.1fMB VRAM)", vram);
+        } else {
+            vramStr = String.format("§a(%.1fMB)", vram);
         }
-        return Text.literal("Resolution: §b" + res + "x" + res + " px");
+
+        if (res <= 0) {
+            return Text.literal("Resolution: §eNative " + vramStr);
+        }
+        return Text.literal("Resolution: §b" + res + "x" + res + " " + vramStr);
     }
 
     private Text getFpsButtonMessage() {
@@ -281,10 +291,17 @@ public class TextureAdjustScreen extends Screen {
         String speedDesc = (entry.getFrameCount() > 1)
                 ? (entry.getFps() < entry.getBaseFps() ? String.format(" | %d/%dfps Step", entry.getFps(), entry.getBaseFps()) : String.format(" | %dfps", entry.getFps()))
                 : "";
-        String resText = String.format("Size: %dx%d (%s) | Res: %s%s",
+        String resText = String.format("Size: %dx%d (%s) | %s%s",
                 entry.getWidth(), entry.getHeight(),
                 entry.getFrameCount() > 1 ? entry.getFrameCount() + " frames" : "Single",
-                currentResStr, speedDesc);
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), this.width / 2, previewY + boxSize + 5, 0xAAAAAA);
+                entry.getVramBadge(), speedDesc);
+        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), this.width / 2, previewY + boxSize + 4, 0xAAAAAA);
+
+        // Warning line if VRAM is high or critical
+        if (entry.isVramCritical()) {
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao (>32MB)! Kéo Resolution về 128x hoặc 64x"), this.width / 2, previewY + boxSize + 14, 0xFF5555);
+        } else if (entry.isVramHigh()) {
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§e⚠ Khuyên giảm Resolution về 128px cho máy VRAM yếu"), this.width / 2, previewY + boxSize + 14, 0xFFFF55);
+        }
     }
 }
