@@ -16,10 +16,16 @@ public class TextureAdjustScreen extends Screen {
     private final TotemEntry entry;
     private final TotemTextureTransform transform;
 
+    private SettingsListWidget settingsList;
     private ButtonWidget fitModeButton;
     private ButtonWidget flipHButton;
     private ButtonWidget flipVButton;
     private ButtonWidget animButton;
+
+    private int previewX;
+    private int previewY;
+    private int boxSize;
+    private boolean isSideBySide;
 
     public TextureAdjustScreen(Screen parent, TotemEntry entry) {
         super(Text.literal("Adjust Canvas: " + entry.getDisplayName()));
@@ -65,13 +71,77 @@ public class TextureAdjustScreen extends Screen {
 
     @Override
     protected void init() {
-        int centerX = this.width / 2;
-        int controlsY = 135;
-        int fullWidth = 240;
-        int halfWidth = 118;
-        int rowGap = 24;
+        isSideBySide = this.width >= 350;
 
-        // Row 1: Fit Mode Button (Fit, Stretch, Fill)
+        int listX;
+        int listY;
+        int listW;
+        int listH;
+
+        if (isSideBySide) {
+            int leftW = Math.min(145, (this.width - 30) / 3);
+            boxSize = (this.height < 240) ? 64 : 80;
+            previewX = 12 + (leftW - boxSize) / 2;
+            previewY = Math.max(22, (this.height - 30 - boxSize - 28) / 2);
+
+            listX = leftW + 20;
+            listY = 22;
+            listW = this.width - listX - 12;
+            listH = Math.max(40, this.height - listY - 32);
+
+            // Reset button placed on the bottom-left under preview
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Reset"),
+                    btn -> {
+                        transform.reset();
+                        TotemManager.getInstance().applyResolution(entry);
+                        TotemManager.getInstance().saveConfig();
+                        this.clearAndInit();
+                    }
+            ).dimensions(12, this.height - 25, leftW, 20).build());
+
+            // Done button placed under the controls list
+            int doneW = Math.min(140, listW - 10);
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Done"),
+                    btn -> this.close()
+            ).dimensions(listX + (listW - doneW) / 2, this.height - 25, doneW, 20).build());
+        } else {
+            boxSize = (this.height < 250) ? 54 : 68;
+            previewX = (this.width - boxSize) / 2;
+            previewY = 18;
+
+            int previewBottom = previewY + boxSize + 24;
+            listX = 10;
+            listY = previewBottom;
+            listW = this.width - 20;
+            listH = Math.max(40, this.height - listY - 32);
+
+            int btnW = Math.min(110, (this.width - 26) / 2);
+            int centerX = this.width / 2;
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Reset"),
+                    btn -> {
+                        transform.reset();
+                        TotemManager.getInstance().applyResolution(entry);
+                        TotemManager.getInstance().saveConfig();
+                        this.clearAndInit();
+                    }
+            ).dimensions(centerX - btnW - 3, this.height - 25, btnW, 20).build());
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Done"),
+                    btn -> this.close()
+            ).dimensions(centerX + 3, this.height - 25, btnW, 20).build());
+        }
+
+        // Scrollable settings list
+        this.settingsList = new SettingsListWidget(this.client, listW, listH, listY, 24);
+        this.settingsList.setX(listX);
+        this.settingsList.setCustomRowWidth(listW - 14);
+
+        // Row 1: Fit Mode Button
         fitModeButton = ButtonWidget.builder(
                 Text.literal("Fit: " + transform.getFitMode().getDisplayName()),
                 btn -> {
@@ -79,14 +149,14 @@ public class TextureAdjustScreen extends Screen {
                     btn.setMessage(Text.literal("Fit: " + transform.getFitMode().getDisplayName()));
                     TotemManager.getInstance().saveConfig();
                 }
-        ).dimensions(centerX - 120, controlsY, fullWidth, 20).build();
-        this.addDrawableChild(fitModeButton);
+        ).dimensions(0, 0, 240, 20).build();
+        this.settingsList.addWidget(fitModeButton);
 
-        // Row 2: Resolution Slider (Native, 16x16, 32x32, 64x64, 128x128, 256x256, 512x512, 1024x1024)
+        // Row 2: Resolution Slider
         int initialResIdx = getResolutionIndex(transform.getResolution());
         double initialResVal = (double) initialResIdx / (double) (RESOLUTION_OPTIONS.length - 1);
-        this.addDrawableChild(new SliderWidget(
-                centerX - 120, controlsY + rowGap, fullWidth, 20,
+        this.settingsList.addWidget(new SliderWidget(
+                0, 0, 240, 20,
                 getResolutionMessage(transform.getResolution()),
                 initialResVal
         ) {
@@ -108,9 +178,9 @@ public class TextureAdjustScreen extends Screen {
             }
         });
 
-        // Row 3: Zoom / Scale Slider: range 0.2f to 3.0f
-        this.addDrawableChild(new SliderWidget(
-                centerX - 120, controlsY + rowGap * 2, fullWidth, 20,
+        // Row 3: Zoom / Scale Slider
+        this.settingsList.addWidget(new SliderWidget(
+                0, 0, 240, 20,
                 Text.literal(String.format("Zoom: %.2fx", transform.getScale())),
                 (transform.getScale() - 0.2) / (3.0 - 0.2)
         ) {
@@ -128,8 +198,8 @@ public class TextureAdjustScreen extends Screen {
         });
 
         // Row 4: Offset X and Offset Y Sliders (Side-by-side)
-        this.addDrawableChild(new SliderWidget(
-                centerX - 120, controlsY + rowGap * 3, halfWidth, 20,
+        SliderWidget offX = new SliderWidget(
+                0, 0, 118, 20,
                 Text.literal(String.format("Offset X: %.2f", transform.getOffsetX())),
                 (transform.getOffsetX() - (-1.0)) / (1.0 - (-1.0))
         ) {
@@ -144,10 +214,10 @@ public class TextureAdjustScreen extends Screen {
                 transform.setOffsetX(Math.round(val * 100.0f) / 100.0f);
                 TotemManager.getInstance().saveConfig();
             }
-        });
+        };
 
-        this.addDrawableChild(new SliderWidget(
-                centerX + 2, controlsY + rowGap * 3, halfWidth, 20,
+        SliderWidget offY = new SliderWidget(
+                0, 0, 118, 20,
                 Text.literal(String.format("Offset Y: %.2f", transform.getOffsetY())),
                 (transform.getOffsetY() - (-1.0)) / (1.0 - (-1.0))
         ) {
@@ -162,9 +232,10 @@ public class TextureAdjustScreen extends Screen {
                 transform.setOffsetY(Math.round(val * 100.0f) / 100.0f);
                 TotemManager.getInstance().saveConfig();
             }
-        });
+        };
+        this.settingsList.addWidgets(offX, offY);
 
-        // Row 5: Toggle Flip Horizontal and Flip Vertical
+        // Row 5: Flip Horizontal and Flip Vertical
         flipHButton = ButtonWidget.builder(
                 Text.literal("Flip H: " + (transform.isFlipX() ? "§aON" : "§7OFF")),
                 btn -> {
@@ -172,8 +243,7 @@ public class TextureAdjustScreen extends Screen {
                     btn.setMessage(Text.literal("Flip H: " + (transform.isFlipX() ? "§aON" : "§7OFF")));
                     TotemManager.getInstance().saveConfig();
                 }
-        ).dimensions(centerX - 120, controlsY + rowGap * 4, halfWidth, 20).build();
-        this.addDrawableChild(flipHButton);
+        ).dimensions(0, 0, 118, 20).build();
 
         flipVButton = ButtonWidget.builder(
                 Text.literal("Flip V: " + (transform.isFlipY() ? "§aON" : "§7OFF")),
@@ -182,10 +252,10 @@ public class TextureAdjustScreen extends Screen {
                     btn.setMessage(Text.literal("Flip V: " + (transform.isFlipY() ? "§aON" : "§7OFF")));
                     TotemManager.getInstance().saveConfig();
                 }
-        ).dimensions(centerX + 2, controlsY + rowGap * 4, halfWidth, 20).build();
-        this.addDrawableChild(flipVButton);
+        ).dimensions(0, 0, 118, 20).build();
+        this.settingsList.addWidgets(flipHButton, flipVButton);
 
-        // Row 6: Toggle Animation & Speed FPS (if spritesheet detected)
+        // Row 6: Animation & Speed FPS (if spritesheet detected)
         if (entry.getFrameCount() > 1) {
             animButton = ButtonWidget.builder(
                     Text.literal("Anim: " + (transform.isAnimated() ? "§aON" : "§7OFF")),
@@ -194,10 +264,8 @@ public class TextureAdjustScreen extends Screen {
                         btn.setMessage(Text.literal("Anim: " + (transform.isAnimated() ? "§aON" : "§7OFF")));
                         TotemManager.getInstance().saveConfig();
                     }
-            ).dimensions(centerX - 120, controlsY + rowGap * 5, halfWidth, 20).build();
-            this.addDrawableChild(animButton);
+            ).dimensions(0, 0, 118, 20).build();
 
-            // FPS cycle button: 10, 15, 20, 30, 45, 60
             ButtonWidget fpsButton = ButtonWidget.builder(
                     getFpsButtonMessage(),
                     btn -> {
@@ -217,27 +285,26 @@ public class TextureAdjustScreen extends Screen {
                         btn.setMessage(getFpsButtonMessage());
                         TotemManager.getInstance().saveConfig();
                     }
-            ).dimensions(centerX + 2, controlsY + rowGap * 5, halfWidth, 20).build();
-            this.addDrawableChild(fpsButton);
+            ).dimensions(0, 0, 118, 20).build();
+
+            this.settingsList.addWidgets(animButton, fpsButton);
         }
 
-        int bottomY = controlsY + (entry.getFrameCount() > 1 ? rowGap * 6 : rowGap * 5);
+        this.addDrawableChild(settingsList);
 
-        // Bottom Row: Reset Button & Done Button
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Reset"),
-                btn -> {
-                    transform.reset();
-                    TotemManager.getInstance().applyResolution(entry);
-                    TotemManager.getInstance().saveConfig();
-                    this.clearAndInit();
-                }
-        ).dimensions(centerX - 120, bottomY, halfWidth, 20).build());
+        // Scroll helper buttons if there's horizontal room
+        if (this.width >= listX + listW + 24) {
+            int scrollBtnX = listX + listW + 2;
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("▲"),
+                    btn -> settingsList.scroll(-60)
+            ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
 
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Done"),
-                btn -> this.close()
-        ).dimensions(centerX + 2, bottomY, halfWidth, 20).build());
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("▼"),
+                    btn -> settingsList.scroll(60)
+            ).dimensions(scrollBtnX, listY + listH - 22, 18, 20).build());
+        }
     }
 
     @Override
@@ -254,12 +321,7 @@ public class TextureAdjustScreen extends Screen {
         // Title
         context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFFFF);
 
-        // Preview Box (84x84 pixels)
-        int boxSize = 84;
-        int previewX = this.width / 2 - boxSize / 2;
-        int previewY = 24;
-
-        // Background and border
+        // Background and border for Preview Box
         context.fill(previewX - 2, previewY - 2, previewX + boxSize + 2, previewY + boxSize + 2, 0xFF555555);
         context.fill(previewX, previewY, previewX + boxSize, previewY + boxSize, 0xFF141414);
 
@@ -286,22 +348,36 @@ public class TextureAdjustScreen extends Screen {
         context.fill(previewX + boxSize - 1, previewY, previewX + boxSize, previewY + boxSize, 0xFF888888);
 
         // Resolution label below preview
-        int currentRes = transform.getResolution();
-        String currentResStr = (currentRes <= 0) ? "Native" : (currentRes + "x" + currentRes);
-        String speedDesc = (entry.getFrameCount() > 1)
-                ? (entry.getFps() < entry.getBaseFps() ? String.format(" | %d/%dfps Step", entry.getFps(), entry.getBaseFps()) : String.format(" | %dfps", entry.getFps()))
-                : "";
-        String resText = String.format("Size: %dx%d (%s) | %s%s",
-                entry.getWidth(), entry.getHeight(),
-                entry.getFrameCount() > 1 ? entry.getFrameCount() + " frames" : "Single",
-                entry.getVramBadge(), speedDesc);
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), this.width / 2, previewY + boxSize + 4, 0xFFAAAAAA);
+        int textCenterX = previewX + boxSize / 2;
+        int textY = previewY + boxSize + 4;
 
-        // Warning line if VRAM is high or critical
-        if (entry.isVramCritical()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao (>32MB)! Kéo Resolution về 128x hoặc 64x"), this.width / 2, previewY + boxSize + 14, 0xFFFF5555);
-        } else if (entry.isVramHigh()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§e⚠ Khuyên giảm Resolution về 128px cho máy VRAM yếu"), this.width / 2, previewY + boxSize + 14, 0xFFFFFF55);
+        if (isSideBySide) {
+            String line1 = String.format("%dx%d %s", entry.getWidth(), entry.getHeight(),
+                    entry.getFrameCount() > 1 ? "(" + entry.getFrameCount() + "f)" : "");
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + line1), textCenterX, textY, 0xFFAAAAAA);
+
+            String speedDesc = (entry.getFrameCount() > 1)
+                    ? (entry.getFps() < entry.getBaseFps() ? String.format(" | %dfps", entry.getFps()) : String.format(" | %dfps", entry.getFps()))
+                    : "";
+            String line2 = entry.getVramBadge() + speedDesc;
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(line2), textCenterX, textY + 10, 0xFFAAAAAA);
+
+            if (entry.isVramCritical()) {
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao!"), textCenterX, textY + 20, 0xFFFF5555);
+            } else if (entry.isVramHigh()) {
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§e⚠ VRAM khá cao"), textCenterX, textY + 20, 0xFFFFFF55);
+            }
+        } else {
+            String currentResStr = (transform.getResolution() <= 0) ? "Native" : (transform.getResolution() + "x" + transform.getResolution());
+            String speedDesc = (entry.getFrameCount() > 1)
+                    ? (entry.getFps() < entry.getBaseFps() ? String.format(" | %d/%dfps", entry.getFps(), entry.getBaseFps()) : String.format(" | %dfps", entry.getFps()))
+                    : "";
+            String resText = String.format("%dx%d | %s%s", entry.getWidth(), entry.getHeight(), entry.getVramBadge(), speedDesc);
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), textCenterX, textY, 0xFFAAAAAA);
+
+            if (entry.isVramCritical()) {
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao (>32MB)!"), textCenterX, textY + 10, 0xFFFF5555);
+            }
         }
     }
 }

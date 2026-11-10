@@ -24,74 +24,146 @@ public class TotemManagerScreen extends Screen {
         this.parent = parent;
     }
 
+    private int folderLabelY = 46;
+
     @Override
     protected void init() {
-        int topBarY = 24;
-        int btnSpacing = 4;
-        int btnCount = 6;
-        int btnWidth = Math.min(84, (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount);
-        int totalTopBarWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
-        int startX = (this.width - totalTopBarWidth) / 2;
+        boolean twoRows = this.width < 480;
+        int listY;
 
-        // Button 1: Folder Browser
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📁 Thư Mục"),
-                btn -> {
-                    if (this.client != null) {
-                        this.client.setScreen(new FolderBrowserScreen(this));
+        if (twoRows) {
+            int row1Y = 18;
+            int row2Y = 40;
+            int btnSpacing = 4;
+            int btnCount = 3;
+            int btnWidth = Math.min(130, (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount);
+            int totalRowWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
+            int startX = (this.width - totalRowWidth) / 2;
+
+            // Row 1: Thư Mục, Tải Link, Quét Lại
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("📁 Thư Mục"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new FolderBrowserScreen(this));
+                        }
                     }
-                }
-        ).dimensions(startX, topBarY, btnWidth, 20).build());
+            ).dimensions(startX, row1Y, btnWidth, 20).build());
 
-        // Button 2: Download by URL directly in game (No browser crash!)
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🌐 Tải Link"),
-                btn -> {
-                    if (this.client != null) {
-                        this.client.setScreen(new DownloadUrlScreen(this));
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🌐 Tải Link"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new DownloadUrlScreen(this));
+                        }
                     }
-                }
-        ).dimensions(startX + (btnWidth + btnSpacing), topBarY, btnWidth, 20).build());
+            ).dimensions(startX + (btnWidth + btnSpacing), row1Y, btnWidth, 20).build());
 
-        // Button 3: Rescan current folder
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🔄 Quét Lại"),
-                btn -> TotemManager.getInstance().rescanImages(this::refreshList)
-        ).dimensions(startX + (btnWidth + btnSpacing) * 2, topBarY, btnWidth, 20).build());
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🔄 Quét Lại"),
+                    btn -> TotemManager.getInstance().rescanImages(this::refreshList)
+            ).dimensions(startX + (btnWidth + btnSpacing) * 2, row1Y, btnWidth, 20).build());
 
-        // Button 4: Switch Totem Pop Mode (SINGLE / SEQUENTIAL / RANDOM)
-        modeButton = ButtonWidget.builder(
-                getModeButtonText(),
-                btn -> {
-                    TotemManager.getInstance().setMode(TotemManager.getInstance().getMode().next());
-                    btn.setMessage(getModeButtonText());
-                }
-        ).dimensions(startX + (btnWidth + btnSpacing) * 3, topBarY, btnWidth, 20).build();
-        this.addDrawableChild(modeButton);
-
-        // Button 5: Display Settings (Model / Mini Totem)
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("⚙ Display"),
-                btn -> {
-                    if (this.client != null) {
-                        this.client.setScreen(new DisplaySettingsScreen(this));
+            // Row 2: Mode, Display, Túi Đồ
+            modeButton = ButtonWidget.builder(
+                    getModeButtonText(),
+                    btn -> {
+                        TotemManager.getInstance().setMode(TotemManager.getInstance().getMode().next());
+                        btn.setMessage(getModeButtonText());
                     }
-                }
-        ).dimensions(startX + (btnWidth + btnSpacing) * 4, topBarY, btnWidth, 20).build());
+            ).dimensions(startX, row2Y, btnWidth, 20).build();
+            this.addDrawableChild(modeButton);
 
-        // Button 6: Inventory GUI Background Settings
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🎒 Túi Đồ"),
-                btn -> {
-                    if (this.client != null) {
-                        this.client.setScreen(new InventoryGuiSettingsScreen(this));
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("⚙ Display"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new DisplaySettingsScreen(this));
+                        }
                     }
-                }
-        ).dimensions(startX + (btnWidth + btnSpacing) * 5, topBarY, btnWidth, 20).build());
+            ).dimensions(startX + (btnWidth + btnSpacing), row2Y, btnWidth, 20).build());
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🎒 Túi Đồ"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new InventoryGuiSettingsScreen(this));
+                        }
+                    }
+            ).dimensions(startX + (btnWidth + btnSpacing) * 2, row2Y, btnWidth, 20).build());
+
+            folderLabelY = 64;
+            listY = 76;
+        } else {
+            int topBarY = 22;
+            int btnSpacing = 4;
+            int btnCount = 6;
+            int btnWidth = Math.min(84, (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount);
+            int totalTopBarWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
+            int startX = (this.width - totalTopBarWidth) / 2;
+
+            // Button 1: Folder Browser
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("📁 Thư Mục"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new FolderBrowserScreen(this));
+                        }
+                    }
+            ).dimensions(startX, topBarY, btnWidth, 20).build());
+
+            // Button 2: Download by URL
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🌐 Tải Link"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new DownloadUrlScreen(this));
+                        }
+                    }
+            ).dimensions(startX + (btnWidth + btnSpacing), topBarY, btnWidth, 20).build());
+
+            // Button 3: Rescan current folder
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🔄 Quét Lại"),
+                    btn -> TotemManager.getInstance().rescanImages(this::refreshList)
+            ).dimensions(startX + (btnWidth + btnSpacing) * 2, topBarY, btnWidth, 20).build());
+
+            // Button 4: Switch Totem Pop Mode
+            modeButton = ButtonWidget.builder(
+                    getModeButtonText(),
+                    btn -> {
+                        TotemManager.getInstance().setMode(TotemManager.getInstance().getMode().next());
+                        btn.setMessage(getModeButtonText());
+                    }
+            ).dimensions(startX + (btnWidth + btnSpacing) * 3, topBarY, btnWidth, 20).build();
+            this.addDrawableChild(modeButton);
+
+            // Button 5: Display Settings
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("⚙ Display"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new DisplaySettingsScreen(this));
+                        }
+                    }
+            ).dimensions(startX + (btnWidth + btnSpacing) * 4, topBarY, btnWidth, 20).build());
+
+            // Button 6: Inventory GUI Background Settings
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🎒 Túi Đồ"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new InventoryGuiSettingsScreen(this));
+                        }
+                    }
+            ).dimensions(startX + (btnWidth + btnSpacing) * 5, topBarY, btnWidth, 20).build());
+
+            folderLabelY = 46;
+            listY = 58;
+        }
 
         // Center List Widget
-        int listY = 62;
-        int listHeight = this.height - listY - 38;
+        int listHeight = Math.max(40, this.height - listY - 36);
         this.listWidget = new TotemListWidget(this.client, this.width - 34, listHeight, listY, 32, this);
         this.listWidget.setX(10);
         this.addDrawableChild(listWidget);
@@ -101,18 +173,18 @@ public class TotemManagerScreen extends Screen {
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("▲"),
                 btn -> listWidget.scroll(-96)
-        ).dimensions(scrollBtnX, listY + 4, 18, 22).build());
+        ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("▼"),
                 btn -> listWidget.scroll(96)
-        ).dimensions(scrollBtnX, listY + listHeight - 26, 18, 22).build());
+        ).dimensions(scrollBtnX, listY + listHeight - 22, 18, 20).build());
 
         // Done button
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("Done"),
                 btn -> this.close()
-        ).dimensions(this.width / 2 - 75, this.height - 26, 150, 20).build());
+        ).dimensions(this.width / 2 - 75, this.height - 25, 150, 20).build());
     }
 
     private Text getModeButtonText() {
@@ -208,7 +280,7 @@ public class TotemManagerScreen extends Screen {
                 this.textRenderer,
                 Text.literal("Folder: " + tag + "§f" + folderName),
                 this.width / 2,
-                48,
+                folderLabelY,
                 0xFFAAAAAA
         );
 

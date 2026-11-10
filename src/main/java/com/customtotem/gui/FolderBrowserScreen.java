@@ -111,9 +111,12 @@ public class FolderBrowserScreen extends Screen {
                 btn -> navigateTo(pathField.getText())
         ).dimensions(pathStartX + upBtnWidth + pathSpacing + pathFieldWidth + pathSpacing, 46, goBtnWidth, 20).build());
 
-        // --- Row 3: File / Folder List (Y = 70 to height - 56) ---
+        // --- Row 3 & 4: File List & Bottom Action Buttons ---
+        boolean twoRows = this.width < 440;
+        int bottomReserve = twoRows ? 54 : 32;
         int listY = 70;
-        int listHeight = Math.max(40, this.height - listY - 56);
+        int listHeight = Math.max(40, this.height - listY - bottomReserve);
+
         this.fileListWidget = new FileListWidget(this.client, this.width - 34, listHeight, listY, 26, this);
         this.fileListWidget.setX(10);
         this.addDrawableChild(fileListWidget);
@@ -123,74 +126,133 @@ public class FolderBrowserScreen extends Screen {
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("▲"),
                 btn -> fileListWidget.scroll(-80)
-        ).dimensions(scrollBtnX, listY + 4, 18, 22).build());
+        ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("▼"),
                 btn -> fileListWidget.scroll(80)
-        ).dimensions(scrollBtnX, listY + listHeight - 26, 18, 22).build());
+        ).dimensions(scrollBtnX, listY + listHeight - 22, 18, 20).build());
 
-        // --- Row 4: Bottom Action Buttons (Y = height - 26) ---
-        int btnWidth = 92;
-        int btnSpacing = 4;
-        int btnCount = 5;
-        int totalBottomWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
-        if (totalBottomWidth > this.width - 10) {
-            btnWidth = (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount;
-            totalBottomWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
+        // --- Row 4: Bottom Action Buttons ---
+        if (twoRows) {
+            int row1Y = this.height - 48;
+            int row2Y = this.height - 25;
+            int btnSpacing = 4;
+
+            // Row 1: 3 buttons (Dùng Thư Mục, Tải Link, Web)
+            int btn3W = (this.width - 20 - (btnSpacing * 2)) / 3;
+            int startX1 = (this.width - ((btn3W * 3) + (btnSpacing * 2))) / 2;
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("✔ Dùng Thư Mục"),
+                    btn -> {
+                        TotemManager.getInstance().setCustomImagesDir(this.currentDirectory);
+                        if (this.parent instanceof TotemManagerScreen tms) {
+                            tms.refreshList();
+                        }
+                        this.close();
+                    }
+            ).dimensions(startX1, row1Y, btn3W, 20).build());
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🌐 Tải Link"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new DownloadUrlScreen(this));
+                        }
+                    }
+            ).dimensions(startX1 + btn3W + btnSpacing, row1Y, btn3W, 20).build());
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("📱 Web WiFi"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new WebGalleryScreen(this));
+                        }
+                    }
+            ).dimensions(startX1 + (btn3W + btnSpacing) * 2, row1Y, btn3W, 20).build());
+
+            // Row 2: 2 buttons (Mặc Định, Quay Lại)
+            int btn2W = (this.width - 20 - btnSpacing) / 2;
+            int startX2 = (this.width - ((btn2W * 2) + btnSpacing)) / 2;
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("↺ Mặc Định"),
+                    btn -> {
+                        TotemManager.getInstance().setCustomImagesDir(null);
+                        if (this.parent instanceof TotemManagerScreen tms) {
+                            tms.refreshList();
+                        }
+                        this.close();
+                    }
+            ).dimensions(startX2, row2Y, btn2W, 20).build());
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Quay Lại"),
+                    btn -> this.close()
+            ).dimensions(startX2 + btn2W + btnSpacing, row2Y, btn2W, 20).build());
+        } else {
+            int btnWidth = 92;
+            int btnSpacing = 4;
+            int btnCount = 5;
+            int totalBottomWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
+            if (totalBottomWidth > this.width - 10) {
+                btnWidth = (this.width - 20 - (btnSpacing * (btnCount - 1))) / btnCount;
+                totalBottomWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
+            }
+            int bStartX = (this.width - totalBottomWidth) / 2;
+            int bY = this.height - 25;
+
+            // Button 1: Set as Totem Folder
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("✔ Dùng Thư Mục"),
+                    btn -> {
+                        TotemManager.getInstance().setCustomImagesDir(this.currentDirectory);
+                        if (this.parent instanceof TotemManagerScreen tms) {
+                            tms.refreshList();
+                        }
+                        this.close();
+                    }
+            ).dimensions(bStartX, bY, btnWidth, 20).build());
+
+            // Button 2: Download by Link URL
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("🌐 Tải Link"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new DownloadUrlScreen(this));
+                        }
+                    }
+            ).dimensions(bStartX + (btnWidth + btnSpacing), bY, btnWidth, 20).build());
+
+            // Button 3: Web Uploader
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("📱 Web (PC/WiFi)"),
+                    btn -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new WebGalleryScreen(this));
+                        }
+                    }
+            ).dimensions(bStartX + (btnWidth + btnSpacing) * 2, bY, btnWidth, 20).build());
+
+            // Button 4: Reset to Mod Default Folder
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("↺ Mặc Định"),
+                    btn -> {
+                        TotemManager.getInstance().setCustomImagesDir(null);
+                        if (this.parent instanceof TotemManagerScreen tms) {
+                            tms.refreshList();
+                        }
+                        this.close();
+                    }
+            ).dimensions(bStartX + (btnWidth + btnSpacing) * 3, bY, btnWidth, 20).build());
+
+            // Button 5: Back
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Quay Lại"),
+                    btn -> this.close()
+            ).dimensions(bStartX + (btnWidth + btnSpacing) * 4, bY, btnWidth, 20).build());
         }
-        int bStartX = (this.width - totalBottomWidth) / 2;
-        int bY = this.height - 26;
-
-        // Button 1: Set as Totem Folder
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("✔ Dùng Thư Mục"),
-                btn -> {
-                    TotemManager.getInstance().setCustomImagesDir(this.currentDirectory);
-                    if (this.parent instanceof TotemManagerScreen tms) {
-                        tms.refreshList();
-                    }
-                    this.close();
-                }
-        ).dimensions(bStartX, bY, btnWidth, 20).build());
-
-        // Button 2: Download by Link URL
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🌐 Tải Link"),
-                btn -> {
-                    if (this.client != null) {
-                        this.client.setScreen(new DownloadUrlScreen(this));
-                    }
-                }
-        ).dimensions(bStartX + (btnWidth + btnSpacing), bY, btnWidth, 20).build());
-
-        // Button 3: Web Uploader (for secondary PC / phone on WiFi)
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📱 Web (PC/WiFi)"),
-                btn -> {
-                    if (this.client != null) {
-                        this.client.setScreen(new WebGalleryScreen(this));
-                    }
-                }
-        ).dimensions(bStartX + (btnWidth + btnSpacing) * 2, bY, btnWidth, 20).build());
-
-        // Button 4: Reset to Mod Default Folder
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("↺ Mặc Định"),
-                btn -> {
-                    TotemManager.getInstance().setCustomImagesDir(null);
-                    if (this.parent instanceof TotemManagerScreen tms) {
-                        tms.refreshList();
-                    }
-                    this.close();
-                }
-        ).dimensions(bStartX + (btnWidth + btnSpacing) * 3, bY, btnWidth, 20).build());
-
-        // Button 5: Back
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Quay Lại"),
-                btn -> this.close()
-        ).dimensions(bStartX + (btnWidth + btnSpacing) * 4, bY, btnWidth, 20).build());
     }
 
     public void navigateTo(Path dir) {

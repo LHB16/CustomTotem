@@ -182,8 +182,9 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             } else if (entry.isVramHigh()) {
                 name = "§e⚠ " + name;
             }
-            if (textRenderer.getWidth(name) > 130) {
-                name = textRenderer.trimToWidth(name, 120) + "...";
+            int maxNameW = Math.max(45, width - 215 - 34);
+            if (textRenderer.getWidth(name) > maxNameW) {
+                name = textRenderer.trimToWidth(name, Math.max(30, maxNameW - 8)) + "...";
             }
             context.drawTextWithShadow(textRenderer, Text.literal(name), x + 30, y + 4, isCurrent ? 0xFF55FF55 : 0xFFFFFFFF);
 

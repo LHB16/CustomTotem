@@ -12,7 +12,6 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.Util;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -22,9 +21,15 @@ public class InventoryGuiSettingsScreen extends Screen {
     private static final int INV_WIDTH = 176;
     private static final int INV_HEIGHT = 166;
 
+    public enum MobileTab {
+        SETTINGS,
+        PREVIEW
+    }
+
     private final Screen parent;
     private final InventoryGuiSettings settings;
 
+    private SettingsListWidget settingsList;
     private ButtonWidget toggleButton;
     private ButtonWidget selectImageButton;
     private ButtonWidget fitModeButton;
@@ -39,9 +44,11 @@ public class InventoryGuiSettingsScreen extends Screen {
     private int previewBoxX = 0;
     private int previewBoxY = 0;
     private boolean isDraggingPreview = false;
+    private boolean sideBySide = true;
+    private MobileTab currentTab = MobileTab.SETTINGS;
 
     public InventoryGuiSettingsScreen(Screen parent) {
-        super(Text.literal("Cài Đặt Ảnh Nền Túi Đồ (Inventory GUI)"));
+        super(Text.literal("Cài Đặt Ảnh Nền Túi Đồ"));
         this.parent = parent;
         this.settings = TotemManager.getInstance().getInventoryGuiSettings();
     }
@@ -50,19 +57,70 @@ public class InventoryGuiSettingsScreen extends Screen {
     protected void init() {
         TotemManager.getInstance().scanInventoryImages();
 
-        int minSideBySideWidth = 390;
-        boolean sideBySide = this.width >= minSideBySideWidth;
+        sideBySide = this.width >= 390;
 
-        int controlsW = sideBySide ? 190 : Math.min(220, this.width - 20);
-        int totalW = sideBySide ? (controlsW + 16 + INV_WIDTH) : Math.max(controlsW, INV_WIDTH);
-        int startX = (this.width - totalW) / 2;
+        int listX;
+        int listY;
+        int listW;
+        int listH;
 
-        int controlsX = startX;
-        int controlsY = 24;
-        int rowGap = 21;
+        if (sideBySide) {
+            listX = 10;
+            listY = 22;
+            listW = Math.min(235, this.width - INV_WIDTH - 28);
+            listH = Math.max(50, this.height - listY - 32);
 
-        previewBoxX = sideBySide ? (startX + controlsW + 16) : ((this.width - INV_WIDTH) / 2);
-        previewBoxY = sideBySide ? Math.max(24, (this.height - INV_HEIGHT) / 2) : (controlsY + (rowGap * 9) + 4);
+            previewBoxX = listX + listW + (this.width - (listX + listW) - INV_WIDTH) / 2;
+            previewBoxY = Math.max(22, (this.height - INV_HEIGHT) / 2);
+
+            // Back button fixed at bottom-left
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Quay lại (Back)"),
+                    btn -> this.close()
+            ).dimensions(listX, this.height - 25, listW, 20).build());
+        } else {
+            // Narrow screen mode with Tab Switcher
+            int tabW = (this.width - 24) / 2;
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal(currentTab == MobileTab.SETTINGS ? "§a⚙ Cài Đặt" : "⚙ Cài Đặt"),
+                    btn -> {
+                        currentTab = MobileTab.SETTINGS;
+                        this.clearAndInit();
+                    }
+            ).dimensions(10, 18, tabW, 20).build());
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal(currentTab == MobileTab.PREVIEW ? "§a👁 Xem Trước" : "👁 Xem Trước"),
+                    btn -> {
+                        currentTab = MobileTab.PREVIEW;
+                        this.clearAndInit();
+                    }
+            ).dimensions(14 + tabW, 18, tabW, 20).build());
+
+            listX = 10;
+            listY = 42;
+            listW = this.width - 20;
+            listH = Math.max(50, this.height - listY - 32);
+
+            previewBoxX = (this.width - INV_WIDTH) / 2;
+            previewBoxY = Math.max(44, (this.height - INV_HEIGHT) / 2);
+
+            // Back button fixed at bottom
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("Quay lại (Back)"),
+                    btn -> this.close()
+            ).dimensions(this.width / 2 - 75, this.height - 25, 150, 20).build());
+        }
+
+        if (sideBySide || currentTab == MobileTab.SETTINGS) {
+            buildSettingsList(listX, listY, listW, listH);
+        }
+    }
+
+    private void buildSettingsList(int listX, int listY, int listW, int listH) {
+        this.settingsList = new SettingsListWidget(this.client, listW, listH, listY, 24);
+        this.settingsList.setX(listX);
+        this.settingsList.setCustomRowWidth(listW - 14);
 
         // Row 0: Toggle Enabled
         toggleButton = ButtonWidget.builder(
@@ -72,28 +130,17 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                     btn.setMessage(getToggleText());
                 }
-        ).dimensions(controlsX, controlsY, controlsW, 20).build();
-        this.addDrawableChild(toggleButton);
+        ).dimensions(0, 0, 200, 20).build();
+        this.settingsList.addWidget(toggleButton);
 
         // Row 1: Image Selection (◀, [Tên], ▶)
-        int cycleBtnWidth = 20;
-        int imgSelectWidth = controlsW - (cycleBtnWidth * 2) - 4;
-
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("◀"),
-                btn -> cycleImage(-1)
-        ).dimensions(controlsX, controlsY + rowGap, cycleBtnWidth, 20).build());
-
-        selectImageButton = ButtonWidget.builder(
-                getImageButtonText(),
-                btn -> cycleImage(1)
-        ).dimensions(controlsX + cycleBtnWidth + 2, controlsY + rowGap, imgSelectWidth, 20).build();
-        this.addDrawableChild(selectImageButton);
-
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("▶"),
-                btn -> cycleImage(1)
-        ).dimensions(controlsX + controlsW - cycleBtnWidth, controlsY + rowGap, cycleBtnWidth, 20).build());
+        ButtonWidget btnPrev = ButtonWidget.builder(Text.literal("◀"), btn -> cycleImage(-1))
+                .dimensions(0, 0, 22, 20).build();
+        selectImageButton = ButtonWidget.builder(getImageButtonText(), btn -> cycleImage(1))
+                .dimensions(0, 0, 140, 20).build();
+        ButtonWidget btnNext = ButtonWidget.builder(Text.literal("▶"), btn -> cycleImage(1))
+                .dimensions(0, 0, 22, 20).build();
+        this.settingsList.addCycleRow(btnPrev, selectImageButton, btnNext, 22);
 
         // Row 2: Fit / Crop Mode (CROP, STRETCH, FIT)
         fitModeButton = ButtonWidget.builder(
@@ -103,8 +150,8 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                     btn.setMessage(getFitModeText());
                 }
-        ).dimensions(controlsX, controlsY + rowGap * 2, controlsW, 20).build();
-        this.addDrawableChild(fitModeButton);
+        ).dimensions(0, 0, 200, 20).build();
+        this.settingsList.addWidget(fitModeButton);
 
         // Row 3: Display Mode (FRAME / FULLSCREEN)
         modeButton = ButtonWidget.builder(
@@ -114,8 +161,8 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                     btn.setMessage(getModeText());
                 }
-        ).dimensions(controlsX, controlsY + rowGap * 3, controlsW, 20).build();
-        this.addDrawableChild(modeButton);
+        ).dimensions(0, 0, 200, 20).build();
+        this.settingsList.addWidget(modeButton);
 
         // Row 4: Vanilla Slots Overlay
         slotsOverlayButton = ButtonWidget.builder(
@@ -128,13 +175,12 @@ public class InventoryGuiSettingsScreen extends Screen {
                         slotsOpacitySlider.setNormalizedValue(settings.getVanillaSlotsOpacity());
                     }
                 }
-        ).dimensions(controlsX, controlsY + rowGap * 4, controlsW, 20).build();
-        this.addDrawableChild(slotsOverlayButton);
+        ).dimensions(0, 0, 200, 20).build();
+        this.settingsList.addWidget(slotsOverlayButton);
 
         // Row 5: Side-by-side Opacity Sliders (Image Opacity & Slots Opacity)
-        int halfW = (controlsW - 4) / 2;
         opacitySlider = new CustomSliderWidget(
-                controlsX, controlsY + rowGap * 5, halfW, 20,
+                0, 0, 100, 20,
                 getOpacityText(),
                 (settings.getOpacity() - 0.1) / 0.9,
                 this::getOpacityText,
@@ -144,10 +190,9 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                 }
         );
-        this.addDrawableChild(opacitySlider);
 
         slotsOpacitySlider = new CustomSliderWidget(
-                controlsX + halfW + 4, controlsY + rowGap * 5, halfW, 20,
+                0, 0, 100, 20,
                 getSlotsOpacityText(),
                 settings.getVanillaSlotsOpacity(),
                 this::getSlotsOpacityText,
@@ -159,11 +204,11 @@ public class InventoryGuiSettingsScreen extends Screen {
                     }
                 }
         );
-        this.addDrawableChild(slotsOpacitySlider);
+        this.settingsList.addWidgets(opacitySlider, slotsOpacitySlider);
 
         // Row 6: Zoom / Scale Slider (0.5x to 3.0x)
         zoomSlider = new CustomSliderWidget(
-                controlsX, controlsY + rowGap * 6, controlsW, 20,
+                0, 0, 200, 20,
                 getZoomText(),
                 (settings.getScale() - 0.5) / 2.5,
                 this::getZoomText,
@@ -173,11 +218,11 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                 }
         );
-        this.addDrawableChild(zoomSlider);
+        this.settingsList.addWidget(zoomSlider);
 
         // Row 7: Offset X and Offset Y Sliders (Side-by-side, -1.0 to 1.0)
         offsetXSlider = new CustomSliderWidget(
-                controlsX, controlsY + rowGap * 7, halfW, 20,
+                0, 0, 100, 20,
                 getOffsetXText(),
                 (settings.getOffsetX() - (-1.0)) / 2.0,
                 this::getOffsetXText,
@@ -187,10 +232,9 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                 }
         );
-        this.addDrawableChild(offsetXSlider);
 
         offsetYSlider = new CustomSliderWidget(
-                controlsX + halfW + 4, controlsY + rowGap * 7, halfW, 20,
+                0, 0, 100, 20,
                 getOffsetYText(),
                 (settings.getOffsetY() - (-1.0)) / 2.0,
                 this::getOffsetYText,
@@ -200,11 +244,10 @@ public class InventoryGuiSettingsScreen extends Screen {
                     TotemManager.getInstance().saveConfig();
                 }
         );
-        this.addDrawableChild(offsetYSlider);
+        this.settingsList.addWidgets(offsetXSlider, offsetYSlider);
 
         // Row 8: Action Buttons (Reset, File Browser, Download URL, Quét Lại)
-        int btn4W = (controlsW - 9) / 4;
-        this.addDrawableChild(ButtonWidget.builder(
+        ButtonWidget btnReset = ButtonWidget.builder(
                 Text.literal("Reset"),
                 btn -> {
                     settings.resetTransform();
@@ -213,27 +256,27 @@ public class InventoryGuiSettingsScreen extends Screen {
                     if (fitModeButton != null) fitModeButton.setMessage(getFitModeText());
                     if (slotsOverlayButton != null) slotsOverlayButton.setMessage(getSlotsOverlayText());
                 }
-        ).dimensions(controlsX, controlsY + rowGap * 8, btn4W, 20).build());
+        ).dimensions(0, 0, 48, 20).build();
 
-        this.addDrawableChild(ButtonWidget.builder(
+        ButtonWidget btnFile = ButtonWidget.builder(
                 Text.literal("📁 File"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new FolderBrowserScreen(this, TotemManager.getInstance().getInventoryGuiDir()));
                     }
                 }
-        ).dimensions(controlsX + btn4W + 3, controlsY + rowGap * 8, btn4W, 20).build());
+        ).dimensions(0, 0, 48, 20).build();
 
-        this.addDrawableChild(ButtonWidget.builder(
+        ButtonWidget btnLink = ButtonWidget.builder(
                 Text.literal("🌐 Link"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new DownloadUrlScreen(this, DownloadUrlScreen.TargetType.INVENTORY_GUI));
                     }
                 }
-        ).dimensions(controlsX + (btn4W + 3) * 2, controlsY + rowGap * 8, btn4W, 20).build());
+        ).dimensions(0, 0, 48, 20).build();
 
-        this.addDrawableChild(ButtonWidget.builder(
+        ButtonWidget btnScan = ButtonWidget.builder(
                 Text.literal("🔃 Quét"),
                 btn -> {
                     TotemManager.getInstance().scanInventoryImages();
@@ -242,16 +285,34 @@ public class InventoryGuiSettingsScreen extends Screen {
                         selectImageButton.setMessage(getImageButtonText());
                     }
                 }
-        ).dimensions(controlsX + (btn4W + 3) * 3, controlsY + rowGap * 8, btn4W, 20).build());
+        ).dimensions(0, 0, 48, 20).build();
 
-        // Row 9: Back Button
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Quay lại (Back)"),
-                btn -> this.close()
-        ).dimensions(controlsX, controlsY + rowGap * 9, controlsW, 20).build());
+        this.settingsList.addWidgets(btnReset, btnFile, btnLink, btnScan);
+
+        this.addDrawableChild(settingsList);
+
+        // Scroll helper buttons if horizontal space permits
+        if (this.width >= listX + listW + 22) {
+            int scrollBtnX = listX + listW + 2;
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("▲"),
+                    btn -> settingsList.scroll(-60)
+            ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
+
+            this.addDrawableChild(ButtonWidget.builder(
+                    Text.literal("▼"),
+                    btn -> settingsList.scroll(60)
+            ).dimensions(scrollBtnX, listY + listH - 22, 18, 20).build());
+        }
     }
 
     private void updateSliders() {
+        if (opacitySlider != null) {
+            opacitySlider.setNormalizedValue((settings.getOpacity() - 0.1) / 0.9);
+        }
+        if (slotsOpacitySlider != null) {
+            slotsOpacitySlider.setNormalizedValue(settings.getVanillaSlotsOpacity());
+        }
         if (zoomSlider != null) {
             zoomSlider.setNormalizedValue((settings.getScale() - 0.5) / 2.5);
         }
@@ -261,62 +322,57 @@ public class InventoryGuiSettingsScreen extends Screen {
         if (offsetYSlider != null) {
             offsetYSlider.setNormalizedValue((settings.getOffsetY() - (-1.0)) / 2.0);
         }
-        if (opacitySlider != null) {
-            opacitySlider.setNormalizedValue((settings.getOpacity() - 0.1) / 0.9);
-        }
-        if (slotsOpacitySlider != null) {
-            slotsOpacitySlider.setNormalizedValue(settings.getVanillaSlotsOpacity());
-        }
     }
 
-    private void cycleImage(int delta) {
-        List<String> images = TotemManager.getInstance().getAvailableInventoryImages();
-        if (images.isEmpty()) {
-            return;
-        }
+    private void cycleImage(int direction) {
+        List<String> list = TotemManager.getInstance().getAvailableInventoryImages();
+        if (list.isEmpty()) return;
 
-        String current = settings.getImageFileName();
-        int currentIdx = current != null ? images.indexOf(current) : -1;
-        int nextIdx;
-        if (currentIdx == -1) {
-            nextIdx = delta > 0 ? 0 : images.size() - 1;
+        int currentIndex = list.indexOf(settings.getImageFileName());
+        int newIndex;
+        if (currentIndex == -1) {
+            newIndex = 0;
         } else {
-            nextIdx = (currentIdx + delta + images.size()) % images.size();
+            newIndex = (currentIndex + direction + list.size()) % list.size();
         }
 
-        String nextImg = images.get(nextIdx);
-        TotemManager.getInstance().setInventoryGuiImage(nextImg);
+        settings.setImageFileName(list.get(newIndex));
+        TotemManager.getInstance().loadInventoryGuiTexture();
+        TotemManager.getInstance().saveConfig();
+
         if (selectImageButton != null) {
             selectImageButton.setMessage(getImageButtonText());
         }
     }
 
     private Text getToggleText() {
-        return Text.literal("Custom Túi Đồ: " + (settings.isEnabled() ? "§aBẬT" : "§cTẮT"));
+        return Text.literal("Bật Ảnh Túi Đồ: " + (settings.isEnabled() ? "§aBẬT (ON)" : "§cTẮT (OFF)"));
     }
 
     private Text getFitModeText() {
-        return Text.literal("Căn ảnh: §e" + settings.getFitMode().getDisplayName());
+        return Text.literal("Chế Độ Cắt: " + settings.getFitMode().getDisplayName());
     }
 
     private Text getModeText() {
-        return Text.literal("Chế độ: §b" + settings.getMode().getDisplayName());
+        return Text.literal("Hiển Thị: " + settings.getMode().getDisplayName());
     }
 
     private Text getSlotsOverlayText() {
-        return Text.literal("Khung Ô: " + (settings.isShowVanillaSlots() ? "§aHIỆN (" + Math.round(settings.getVanillaSlotsOpacity() * 100) + "%)" : "§7ẨN"));
+        return Text.literal("Ô Đồ Mặc Định: " + (settings.isShowVanillaSlots() ? "§aBẬT" : "§7ẨN"));
     }
 
     private Text getOpacityText() {
-        return Text.literal(String.format("Mờ ảnh: §a%d%%", Math.round(settings.getOpacity() * 100)));
+        int pct = Math.round(settings.getOpacity() * 100);
+        return Text.literal("Ảnh: §e" + pct + "%");
     }
 
     private Text getSlotsOpacityText() {
-        return Text.literal(String.format("Mờ ô: §a%d%%", Math.round(settings.getVanillaSlotsOpacity() * 100)));
+        int pct = Math.round(settings.getVanillaSlotsOpacity() * 100);
+        return Text.literal("Ô Đồ: §e" + pct + "%");
     }
 
     private Text getZoomText() {
-        return Text.literal(String.format("Zoom: §b%.2fx", settings.getScale()));
+        return Text.literal(String.format("Phóng To (Zoom): §b%.2fx", settings.getScale()));
     }
 
     private Text getOffsetXText() {
@@ -342,9 +398,13 @@ public class InventoryGuiSettingsScreen extends Screen {
         return Text.literal("§e" + name);
     }
 
+    private boolean shouldShowPreview() {
+        return sideBySide || currentTab == MobileTab.PREVIEW;
+    }
+
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
-        if (click.button() == 0 && isInsidePreview(click.x(), click.y())) {
+        if (shouldShowPreview() && click.button() == 0 && isInsidePreview(click.x(), click.y())) {
             isDraggingPreview = true;
             return true;
         }
@@ -376,7 +436,7 @@ public class InventoryGuiSettingsScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (isInsidePreview(mouseX, mouseY)) {
+        if (shouldShowPreview() && isInsidePreview(mouseX, mouseY)) {
             float zoomDelta = (float) (verticalAmount * 0.1);
             settings.setScale(Math.round((settings.getScale() + zoomDelta) * 20.0f) / 20.0f);
             updateSliders();
@@ -401,10 +461,16 @@ public class InventoryGuiSettingsScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float tickDelta) {
         super.render(context, mouseX, mouseY, tickDelta);
 
-        // Header Title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFFFF);
+        if (sideBySide) {
+            context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFFFF);
+        }
 
-        // Preview Box (176 x 166 - Actual Minecraft Inventory Size)
+        if (shouldShowPreview()) {
+            drawPreview(context, mouseX, mouseY);
+        }
+    }
+
+    private void drawPreview(DrawContext context, int mouseX, int mouseY) {
         int px = previewBoxX;
         int py = previewBoxY;
 
@@ -464,7 +530,7 @@ public class InventoryGuiSettingsScreen extends Screen {
 
         // Subtitle / Drag hint below preview
         context.drawCenteredTextWithShadow(this.textRenderer,
-                Text.literal("§8🖱 Kéo chuột để dịch • Lăn để Zoom"),
+                Text.literal("§8🖱 Kéo để dịch • Lăn để Zoom"),
                 px + INV_WIDTH / 2, py + INV_HEIGHT + 4, 0xFF888888);
     }
 

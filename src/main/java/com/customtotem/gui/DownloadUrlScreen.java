@@ -55,7 +55,9 @@ public class DownloadUrlScreen extends Screen {
         int centerX = this.width / 2;
         int cardWidth = Math.min(360, this.width - 30);
         int startX = centerX - cardWidth / 2;
-        int currentY = 46;
+
+        boolean compact = this.height < 250;
+        int currentY = compact ? 20 : Math.max(34, (this.height - 200) / 2);
 
         // Target Folder Switcher
         this.targetButton = ButtonWidget.builder(
@@ -66,7 +68,7 @@ public class DownloadUrlScreen extends Screen {
                 }
         ).dimensions(startX, currentY, cardWidth, 20).build();
         this.addDrawableChild(targetButton);
-        currentY += 28;
+        currentY += compact ? 24 : 28;
 
         // URL Label & Input Field
         this.urlField = new TextFieldWidget(
@@ -94,7 +96,7 @@ public class DownloadUrlScreen extends Screen {
                     }
                 }
         ).dimensions(startX + cardWidth - 60, currentY + 12, 60, 20).build());
-        currentY += 40;
+        currentY += compact ? 36 : 40;
 
         // Optional Name Field
         this.nameField = new TextFieldWidget(
@@ -108,7 +110,7 @@ public class DownloadUrlScreen extends Screen {
         this.nameField.setMaxLength(128);
         this.nameField.setPlaceholder(Text.literal("Tên gợi nhớ (để trống sẽ tự lấy tên ảnh)..."));
         this.addDrawableChild(nameField);
-        currentY += 44;
+        currentY += compact ? 38 : 44;
 
         // Download Action Button
         this.downloadButton = ButtonWidget.builder(
@@ -116,7 +118,7 @@ public class DownloadUrlScreen extends Screen {
                 btn -> startDownload()
         ).dimensions(startX, currentY, cardWidth, 22).build();
         this.addDrawableChild(downloadButton);
-        currentY += 30;
+        currentY += compact ? 26 : 30;
 
         // Bottom Navigation Buttons
         int halfW = (cardWidth - 6) / 2;
@@ -229,22 +231,28 @@ public class DownloadUrlScreen extends Screen {
         super.render(context, mouseX, mouseY, tickDelta);
 
         // Header
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 14, 0xFFFFFFFF);
-        context.drawCenteredTextWithShadow(
-                this.textRenderer,
-                Text.literal("§7Tải trực tiếp ảnh từ Discord, Imgur, Pinterest, Facebook... mà không cần mở trình duyệt"),
-                this.width / 2,
-                28,
-                0xFFAAAAAA
-        );
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, this.height < 250 ? 6 : 14, 0xFFFFFFFF);
+        if (this.height >= 250) {
+            context.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("§7Tải trực tiếp ảnh từ Discord, Imgur, Pinterest, Facebook... mà không cần mở trình duyệt"),
+                    this.width / 2,
+                    26,
+                    0xFFAAAAAA
+            );
+        }
 
         int centerX = this.width / 2;
         int cardWidth = Math.min(360, this.width - 30);
         int startX = centerX - cardWidth / 2;
 
         // Field Labels
-        context.drawTextWithShadow(this.textRenderer, Text.literal("§fĐường link ảnh trực tiếp (URL):"), startX, 74, 0xFFFFFFFF);
-        context.drawTextWithShadow(this.textRenderer, Text.literal("§7Tên file muốn lưu (tùy chọn):"), startX, 114, 0xFFAAAAAA);
+        if (urlField != null) {
+            context.drawTextWithShadow(this.textRenderer, Text.literal("§fĐường link ảnh trực tiếp (URL):"), startX, urlField.getY() - 10, 0xFFFFFFFF);
+        }
+        if (nameField != null) {
+            context.drawTextWithShadow(this.textRenderer, Text.literal("§7Tên file muốn lưu (tùy chọn):"), startX, nameField.getY() - 10, 0xFFAAAAAA);
+        }
 
         // Status Message
         if (!statusMessage.isEmpty()) {
