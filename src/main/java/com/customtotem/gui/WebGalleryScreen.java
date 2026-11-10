@@ -85,34 +85,35 @@ public class WebGalleryScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float tickDelta) {
         super.render(context, mouseX, mouseY, tickDelta);
 
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 14, 0x55FF55);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 14, 0xFF55FF55);
 
-        String url = TotemWebServer.getInstance().getUrl();
+        String localUrl = TotemWebServer.getInstance().getUrl();
+        String lanUrl = TotemWebServer.getInstance().getLanUrl();
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§7Địa chỉ Web nội bộ: §e" + url),
+                Text.literal("§7Trên máy này: §e" + localUrl + " §7| Thiết bị khác (cùng WiFi): §a" + lanUrl),
                 this.width / 2,
                 34,
-                0xFFFFFF
+                0xFFFFFFFF
         );
 
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§f1. Chạm nút mở trình duyệt (Chrome/Samsung Internet) hoặc dán link trên"),
+                Text.literal("§e💡 Mẹo tránh văng game: Dùng máy tính hoặc điện thoại khác truy cập link xanh ở trên để nạp ảnh"),
                 this.width / 2,
                 50,
-                0xDDDDDD
+                0xFFFFFF55
         );
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§f2. Bấm 'Mở Thư Viện Ảnh' để chọn ảnh từ Album -> Bấm 'Tải Lên'"),
+                Text.literal("§fHoặc sử dụng tính năng '🌐 Tải Link' hay '📁 Thư Mục' để chọn ảnh trực tiếp trong game!"),
                 this.width / 2,
                 64,
-                0xDDDDDD
+                0xFFDDDDDD
         );
 
         if (System.currentTimeMillis() < statusExpireTime && !statusMessage.isEmpty()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(statusMessage), this.width / 2, this.height - 24, 0x55FF55);
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(statusMessage), this.width / 2, this.height - 24, 0xFF55FF55);
         }
     }
 }

@@ -202,10 +202,10 @@ public class InventoryGuiSettingsScreen extends Screen {
         );
         this.addDrawableChild(offsetYSlider);
 
-        // Row 8: Action Buttons (Reset, Thư Mục, Quét Lại)
-        int btn3W = (controlsW - 8) / 3;
+        // Row 8: Action Buttons (Reset, File Browser, Download URL, Quét Lại)
+        int btn4W = (controlsW - 9) / 4;
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🔄 Reset"),
+                Text.literal("Reset"),
                 btn -> {
                     settings.resetTransform();
                     TotemManager.getInstance().saveConfig();
@@ -213,12 +213,25 @@ public class InventoryGuiSettingsScreen extends Screen {
                     if (fitModeButton != null) fitModeButton.setMessage(getFitModeText());
                     if (slotsOverlayButton != null) slotsOverlayButton.setMessage(getSlotsOverlayText());
                 }
-        ).dimensions(controlsX, controlsY + rowGap * 8, btn3W, 20).build());
+        ).dimensions(controlsX, controlsY + rowGap * 8, btn4W, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📁 Mở"),
-                btn -> Util.getOperatingSystem().open(TotemManager.getInstance().getInventoryGuiDir())
-        ).dimensions(controlsX + btn3W + 4, controlsY + rowGap * 8, btn3W, 20).build());
+                Text.literal("📁 File"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new FolderBrowserScreen(this, TotemManager.getInstance().getInventoryGuiDir()));
+                    }
+                }
+        ).dimensions(controlsX + btn4W + 3, controlsY + rowGap * 8, btn4W, 20).build());
+
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("🌐 Link"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new DownloadUrlScreen(this, DownloadUrlScreen.TargetType.INVENTORY_GUI));
+                    }
+                }
+        ).dimensions(controlsX + (btn4W + 3) * 2, controlsY + rowGap * 8, btn4W, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("🔃 Quét"),
@@ -229,7 +242,7 @@ public class InventoryGuiSettingsScreen extends Screen {
                         selectImageButton.setMessage(getImageButtonText());
                     }
                 }
-        ).dimensions(controlsX + (btn3W + 4) * 2, controlsY + rowGap * 8, btn3W, 20).build());
+        ).dimensions(controlsX + (btn4W + 3) * 3, controlsY + rowGap * 8, btn4W, 20).build());
 
         // Row 9: Back Button
         this.addDrawableChild(ButtonWidget.builder(
@@ -389,7 +402,7 @@ public class InventoryGuiSettingsScreen extends Screen {
         super.render(context, mouseX, mouseY, tickDelta);
 
         // Header Title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFFFF);
 
         // Preview Box (176 x 166 - Actual Minecraft Inventory Size)
         int px = previewBoxX;
@@ -398,7 +411,7 @@ public class InventoryGuiSettingsScreen extends Screen {
         // Label above preview
         context.drawCenteredTextWithShadow(this.textRenderer,
                 Text.literal("§6Túi Đồ Thật (176x166)"),
-                px + INV_WIDTH / 2, py - 12, 0xFFD700);
+                px + INV_WIDTH / 2, py - 12, 0xFFFFD700);
 
         // Frame Border and Background
         context.fill(px - 2, py - 2, px + INV_WIDTH + 2, py + INV_HEIGHT + 2, 0xFF444444);
@@ -446,13 +459,13 @@ public class InventoryGuiSettingsScreen extends Screen {
                     ? Text.literal("§c[Túi đồ custom đang TẮT]")
                     : Text.literal("§7[Chưa chọn hình ảnh]");
             context.drawCenteredTextWithShadow(this.textRenderer, statusText,
-                    px + INV_WIDTH / 2, py + INV_HEIGHT / 2 - 4, 0xAAAAAA);
+                    px + INV_WIDTH / 2, py + INV_HEIGHT / 2 - 4, 0xFFAAAAAA);
         }
 
         // Subtitle / Drag hint below preview
         context.drawCenteredTextWithShadow(this.textRenderer,
                 Text.literal("§8🖱 Kéo chuột để dịch • Lăn để Zoom"),
-                px + INV_WIDTH / 2, py + INV_HEIGHT + 4, 0x888888);
+                px + INV_WIDTH / 2, py + INV_HEIGHT + 4, 0xFF888888);
     }
 
     private static class CustomSliderWidget extends SliderWidget {

@@ -38,17 +38,25 @@ public class FolderBrowserScreen extends Screen {
     private FileListWidget fileListWidget;
 
     private String statusMessage = "";
-    private int statusColor = 0x55FF55;
+    private int statusColor = 0xFF55FF55;
     private long statusExpireTime = 0;
 
     public FolderBrowserScreen(Screen parent) {
+        this(parent, null);
+    }
+
+    public FolderBrowserScreen(Screen parent, Path initialDir) {
         super(Text.literal("Trình Duyệt Tệp & Thư Mục Totem"));
         this.parent = parent;
-        Path initial = TotemManager.getInstance().getImagesDir();
-        if (initial != null && Files.exists(initial)) {
-            this.currentDirectory = initial.toAbsolutePath().normalize();
+        if (initialDir != null && Files.exists(initialDir)) {
+            this.currentDirectory = initialDir.toAbsolutePath().normalize();
         } else {
-            this.currentDirectory = FabricLoader.getInstance().getGameDir().toAbsolutePath().normalize();
+            Path initial = TotemManager.getInstance().getImagesDir();
+            if (initial != null && Files.exists(initial)) {
+                this.currentDirectory = initial.toAbsolutePath().normalize();
+            } else {
+                this.currentDirectory = FabricLoader.getInstance().getGameDir().toAbsolutePath().normalize();
+            }
         }
     }
 
@@ -58,7 +66,7 @@ public class FolderBrowserScreen extends Screen {
         List<Shortcut> shortcuts = getShortcuts();
         int scCount = shortcuts.size();
         int scSpacing = 4;
-        int scBtnWidth = Math.min(95, (this.width - 20 - (scSpacing * (scCount - 1))) / scCount);
+        int scBtnWidth = Math.min(85, (this.width - 20 - (scSpacing * (scCount - 1))) / scCount);
         int totalScWidth = (scBtnWidth * scCount) + (scSpacing * (scCount - 1));
         int scStartX = (this.width - totalScWidth) / 2;
 
@@ -123,8 +131,8 @@ public class FolderBrowserScreen extends Screen {
         ).dimensions(scrollBtnX, listY + listHeight - 26, 18, 22).build());
 
         // --- Row 4: Bottom Action Buttons (Y = height - 26) ---
-        int btnWidth = 100;
-        int btnSpacing = 5;
+        int btnWidth = 92;
+        int btnSpacing = 4;
         int btnCount = 5;
         int totalBottomWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
         if (totalBottomWidth > this.width - 10) {
@@ -146,19 +154,29 @@ public class FolderBrowserScreen extends Screen {
                 }
         ).dimensions(bStartX, bY, btnWidth, 20).build());
 
-        // Button 2: Open Mobile Gallery Web
+        // Button 2: Download by Link URL
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📱 Thư Viện"),
+                Text.literal("🌐 Tải Link"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new DownloadUrlScreen(this));
+                    }
+                }
+        ).dimensions(bStartX + (btnWidth + btnSpacing), bY, btnWidth, 20).build());
+
+        // Button 3: Web Uploader (for secondary PC / phone on WiFi)
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("📱 Web (PC/WiFi)"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new WebGalleryScreen(this));
                     }
                 }
-        ).dimensions(bStartX + (btnWidth + btnSpacing), bY, btnWidth, 20).build());
+        ).dimensions(bStartX + (btnWidth + btnSpacing) * 2, bY, btnWidth, 20).build());
 
-        // Button 3: Reset to Mod Default Folder
+        // Button 4: Reset to Mod Default Folder
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Mặc Định"),
+                Text.literal("↺ Mặc Định"),
                 btn -> {
                     TotemManager.getInstance().setCustomImagesDir(null);
                     if (this.parent instanceof TotemManagerScreen tms) {
@@ -166,23 +184,9 @@ public class FolderBrowserScreen extends Screen {
                     }
                     this.close();
                 }
-        ).dimensions(bStartX + (btnWidth + btnSpacing) * 2, bY, btnWidth, 20).build());
-
-        // Button 4: Native PC File Picker (Desktop only)
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal(PlatformUtil.isAndroid() ? "Quét Lại" : "PC Picker"),
-                btn -> {
-                    if (PlatformUtil.isAndroid()) {
-                        TotemManager.getInstance().rescanImages();
-                        if (fileListWidget != null) fileListWidget.refresh();
-                        setStatus("§aĐã quét lại thư mục!", false);
-                    } else {
-                        openDesktopFileDialog();
-                    }
-                }
         ).dimensions(bStartX + (btnWidth + btnSpacing) * 3, bY, btnWidth, 20).build());
 
-        // Button 5: Back / Close
+        // Button 5: Back
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("Quay Lại"),
                 btn -> this.close()
@@ -246,41 +250,8 @@ public class FolderBrowserScreen extends Screen {
 
     public void setStatus(String message, boolean isError) {
         this.statusMessage = message;
-        this.statusColor = isError ? 0xFF5555 : 0x55FF55;
+        this.statusColor = isError ? 0xFFFF5555 : 0xFF55FF55;
         this.statusExpireTime = System.currentTimeMillis() + 4000;
-    }
-
-    private void openDesktopFileDialog() {
-        if (PlatformUtil.isAndroid()) {
-            if (this.client != null) {
-                this.client.setScreen(new WebGalleryScreen(this));
-            }
-            return;
-        }
-
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                return TinyFileDialogs.tinyfd_openFileDialog(
-                        "Select Totem PNG Image",
-                        this.currentDirectory != null ? this.currentDirectory.toString() : "",
-                        null,
-                        "PNG Images (*.png)",
-                        false
-                );
-            } catch (Throwable t) {
-                return null;
-            }
-        }).thenAccept(filePath -> {
-            if (filePath != null && !filePath.trim().isEmpty()) {
-                Path path = Path.of(filePath);
-                MinecraftClient.getInstance().execute(() -> {
-                    importImage(path);
-                    if (Files.exists(path) && path.getParent() != null) {
-                        navigateTo(path.getParent());
-                    }
-                });
-            }
-        });
     }
 
     @Override
@@ -306,7 +277,7 @@ public class FolderBrowserScreen extends Screen {
         super.render(context, mouseX, mouseY, tickDelta);
 
         // Header Title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 7, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 7, 0xFFFFFFFF);
 
         // Status or Active Folder display above bottom buttons
         if (System.currentTimeMillis() < statusExpireTime && !statusMessage.isEmpty()) {
@@ -322,7 +293,7 @@ public class FolderBrowserScreen extends Screen {
                     Text.literal("§7Nguồn ảnh hiện tại: §e" + activeStr),
                     this.width / 2,
                     this.height - 42,
-                    0xAAAAAA
+                    0xFFAAAAAA
             );
         }
     }
@@ -337,16 +308,20 @@ public class FolderBrowserScreen extends Screen {
         // 1. Mod Default
         list.add(new Shortcut("📁 Mod", TotemManager.getInstance().getDefaultImagesDir()));
 
-        // 2. Android DCIM (Camera)
-        Path dcim = resolveFirstExisting(
-                Path.of("/storage/emulated/0/DCIM"),
-                Path.of("/sdcard/DCIM")
+        // 2. Mod Inventory Folder
+        list.add(new Shortcut("🎒 Túi Đồ", TotemManager.getInstance().getInventoryGuiDir()));
+
+        // 3. Android Download/CustomTotem (Auto created/checked)
+        Path dlTotem = resolveFirstExisting(
+                Path.of("/storage/emulated/0/Download/CustomTotem"),
+                Path.of("/sdcard/Download/CustomTotem"),
+                Path.of(System.getProperty("user.home", ""), "Downloads/CustomTotem")
         );
-        if (dcim != null) {
-            list.add(new Shortcut("📸 DCIM", dcim));
+        if (dlTotem != null) {
+            list.add(new Shortcut("📥 DL/Totem", dlTotem));
         }
 
-        // 3. Android / PC Downloads
+        // 4. Android / PC Downloads
         Path dl = resolveFirstExisting(
                 Path.of("/storage/emulated/0/Download"),
                 Path.of("/sdcard/Download"),
@@ -356,7 +331,7 @@ public class FolderBrowserScreen extends Screen {
             list.add(new Shortcut("📥 Tải Về", dl));
         }
 
-        // 4. Android / PC Pictures
+        // 5. Android Pictures
         Path pic = resolveFirstExisting(
                 Path.of("/storage/emulated/0/Pictures"),
                 Path.of("/sdcard/Pictures"),
@@ -366,7 +341,16 @@ public class FolderBrowserScreen extends Screen {
             list.add(new Shortcut("🖼 Ảnh", pic));
         }
 
-        // 5. Game Root
+        // 6. Android DCIM (Camera)
+        Path dcim = resolveFirstExisting(
+                Path.of("/storage/emulated/0/DCIM"),
+                Path.of("/sdcard/DCIM")
+        );
+        if (dcim != null) {
+            list.add(new Shortcut("📸 DCIM", dcim));
+        }
+
+        // 7. Game Root
         list.add(new Shortcut("🎮 Game", FabricLoader.getInstance().getGameDir()));
 
         return list;
@@ -375,8 +359,13 @@ public class FolderBrowserScreen extends Screen {
     private static Path resolveFirstExisting(Path... candidates) {
         for (Path p : candidates) {
             try {
-                if (p != null && Files.exists(p) && Files.isDirectory(p)) {
-                    return p.toAbsolutePath().normalize();
+                if (p != null) {
+                    if (Files.exists(p) && Files.isDirectory(p)) {
+                        return p.toAbsolutePath().normalize();
+                    } else if (p.getParent() != null && Files.exists(p.getParent()) && p.toString().contains("CustomTotem")) {
+                        Files.createDirectories(p);
+                        return p.toAbsolutePath().normalize();
+                    }
                 }
             } catch (Exception ignored) {}
         }
@@ -411,6 +400,28 @@ public class FolderBrowserScreen extends Screen {
                 return true;
             }
             return false;
+        }
+
+        @Override
+        public void renderWidget(DrawContext context, int mouseX, int mouseY, float tickDelta) {
+            super.renderWidget(context, mouseX, mouseY, tickDelta);
+            if (this.children().isEmpty()) {
+                TextRenderer tr = MinecraftClient.getInstance().textRenderer;
+                context.drawCenteredTextWithShadow(
+                        tr,
+                        Text.literal("§7Thư mục này trống hoặc chưa có file ảnh .png"),
+                        this.getX() + this.getWidth() / 2,
+                        this.getY() + this.getHeight() / 2 - 8,
+                        0xFFAAAAAA
+                );
+                context.drawCenteredTextWithShadow(
+                        tr,
+                        Text.literal("§e💡 Bấm nút '🌐 Tải Link' bên dưới để dán link ảnh trực tiếp"),
+                        this.getX() + this.getWidth() / 2,
+                        this.getY() + this.getHeight() / 2 + 6,
+                        0xFFFFFF55
+                );
+            }
         }
 
         public void refresh() {
@@ -460,7 +471,7 @@ public class FolderBrowserScreen extends Screen {
 
         @Override
         public int getRowWidth() {
-            return Math.min(this.width - 10, 520);
+            return Math.max(100, this.width - 24);
         }
 
         public class FileItemWidget extends ElementListWidget.Entry<FileItemWidget> {
@@ -481,17 +492,17 @@ public class FolderBrowserScreen extends Screen {
                     this.actionButton = ButtonWidget.builder(
                             Text.literal("▲ Lên"),
                             btn -> screen.navigateUp()
-                    ).dimensions(0, 0, 48, 20).build();
+                    ).dimensions(0, 0, 46, 20).build();
                 } else if (isDirectory) {
                     this.actionButton = ButtonWidget.builder(
                             Text.literal("Mở"),
                             btn -> screen.navigateTo(path)
-                    ).dimensions(0, 0, 48, 20).build();
+                    ).dimensions(0, 0, 46, 20).build();
                 } else {
                     this.actionButton = ButtonWidget.builder(
                             Text.literal("+ Add"),
                             btn -> screen.importImage(path)
-                    ).dimensions(0, 0, 48, 20).build();
+                    ).dimensions(0, 0, 46, 20).build();
                 }
 
                 this.children.add(this.actionButton);
@@ -509,28 +520,29 @@ public class FolderBrowserScreen extends Screen {
                     context.fill(x - 2, y, x + width + 2, y + height, 0x25FFFFFF);
                 }
 
-                // Render Clean Label without non-standard Unicode emojis to prevent text dropout
+                // Clean ARGB prefix colors with full alpha (0xFF...) so Minecraft doesn't drop the text
                 String prefix;
                 int prefixColor;
                 if (isParent) {
                     prefix = "§6[UP] ";
-                    prefixColor = 0xFFAA00;
+                    prefixColor = 0xFFFFAA00;
                 } else if (isDirectory) {
                     prefix = "§e[DIR] ";
-                    prefixColor = 0xFFFF55;
+                    prefixColor = 0xFFFFFF55;
                 } else {
                     prefix = "§b[IMG] ";
-                    prefixColor = 0x55FFFF;
+                    prefixColor = 0xFF55FFFF;
                 }
 
                 String label = prefix + displayName + (isDirectory && !isParent ? "/" : "");
-                if (textRenderer.getWidth(label) > width - 58) {
-                    label = textRenderer.trimToWidth(label, width - 68) + "...";
+                int maxTextWidth = Math.max(30, width - 54);
+                if (textRenderer.getWidth(label) > maxTextWidth) {
+                    label = textRenderer.trimToWidth(label, Math.max(10, maxTextWidth - 8)) + "...";
                 }
                 context.drawTextWithShadow(textRenderer, Text.literal(label), x + 4, y + 6, prefixColor);
 
                 // Render Action Button
-                actionButton.setX(x + width - 50);
+                actionButton.setX(x + width - 48);
                 actionButton.setY(y + 2);
                 actionButton.render(context, mouseX, mouseY, tickDelta);
             }

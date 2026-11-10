@@ -55,16 +55,18 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
 
         final float southZ = 0.501f;
         final float northZ = 0.499f;
+        final boolean isFloating = TotemManager.getInstance().isRenderingFloatingItem();
         final boolean fullbright = TotemManager.getInstance().isFullbright();
-        final int renderLight = (fullbright || displayContext == ItemDisplayContext.GUI) ? 0x00F000F0 : light;
+        final boolean unshaded = fullbright || isFloating || displayContext == ItemDisplayContext.GUI;
+        final int renderLight = unshaded ? 0x00F000F0 : light;
 
-        RenderLayer layer = entry.getRenderLayer(fullbright || displayContext == ItemDisplayContext.GUI);
+        RenderLayer layer = entry.getRenderLayer(unshaded);
         if (layer == null) return;
 
-        final float southNy = fullbright ? 1.0f : 0.0f;
-        final float southNz = fullbright ? 0.0f : 1.0f;
-        final float northNy = fullbright ? 1.0f : 0.0f;
-        final float northNz = fullbright ? 0.0f : -1.0f;
+        final float southNy = unshaded ? 1.0f : 0.0f;
+        final float southNz = unshaded ? 0.0f : 1.0f;
+        final float northNy = unshaded ? 1.0f : 0.0f;
+        final float northNz = unshaded ? 0.0f : -1.0f;
 
         queue.submitCustom(matrices, layer, (matrixEntry, consumer) -> {
             // South Face (Front)

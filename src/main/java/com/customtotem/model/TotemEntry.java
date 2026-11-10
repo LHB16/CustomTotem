@@ -179,7 +179,7 @@ public class TotemEntry {
         }
         if (fullbright) {
             if (cachedEmissiveRenderLayer == null) {
-                cachedEmissiveRenderLayer = RenderLayers.entityTranslucentEmissive(textureId);
+                cachedEmissiveRenderLayer = RenderLayers.eyes(textureId);
             }
             return cachedEmissiveRenderLayer;
         } else {

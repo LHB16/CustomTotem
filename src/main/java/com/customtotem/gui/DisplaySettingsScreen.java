@@ -189,6 +189,6 @@ public class DisplaySettingsScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float tickDelta) {
         super.render(context, mouseX, mouseY, tickDelta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 16, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 16, 0xFFFFFFFF);
     }
 }

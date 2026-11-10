@@ -252,7 +252,7 @@ public class TextureAdjustScreen extends Screen {
         super.render(context, mouseX, mouseY, tickDelta);
 
         // Title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFFFF);
 
         // Preview Box (84x84 pixels)
         int boxSize = 84;
@@ -295,13 +295,13 @@ public class TextureAdjustScreen extends Screen {
                 entry.getWidth(), entry.getHeight(),
                 entry.getFrameCount() > 1 ? entry.getFrameCount() + " frames" : "Single",
                 entry.getVramBadge(), speedDesc);
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), this.width / 2, previewY + boxSize + 4, 0xAAAAAA);
+        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), this.width / 2, previewY + boxSize + 4, 0xFFAAAAAA);
 
         // Warning line if VRAM is high or critical
         if (entry.isVramCritical()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao (>32MB)! Kéo Resolution về 128x hoặc 64x"), this.width / 2, previewY + boxSize + 14, 0xFF5555);
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao (>32MB)! Kéo Resolution về 128x hoặc 64x"), this.width / 2, previewY + boxSize + 14, 0xFFFF5555);
         } else if (entry.isVramHigh()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§e⚠ Khuyên giảm Resolution về 128px cho máy VRAM yếu"), this.width / 2, previewY + boxSize + 14, 0xFFFF55);
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§e⚠ Khuyên giảm Resolution về 128px cho máy VRAM yếu"), this.width / 2, previewY + boxSize + 14, 0xFFFFFF55);
         }
     }
 }

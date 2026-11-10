@@ -77,6 +77,28 @@ public class TotemWebServer {
         return "http://localhost:" + port;
     }
 
+    public String getLocalIpAddress() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> interfaces = java.net.NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                java.net.NetworkInterface iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp()) continue;
+                java.util.Enumeration<java.net.InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    java.net.InetAddress addr = addresses.nextElement();
+                    if (addr instanceof java.net.Inet4Address && !addr.isLoopbackAddress()) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return "127.0.0.1";
+    }
+
+    public String getLanUrl() {
+        return "http://" + getLocalIpAddress() + ":" + port;
+    }
+
     private static class WebPageHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -91,107 +113,102 @@ public class TotemWebServer {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Custom Totem - Thư Viện Ảnh</title>
+    <title>Custom Totem - Nạp Ảnh Không Lo Văng Game</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         body { background: #121214; color: #e1e1e6; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-        .card { background: #202024; border: 1px solid #323238; border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; }
+        .card { background: #202024; border: 1px solid #323238; border-radius: 16px; padding: 24px; max-width: 460px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; }
         h1 { font-size: 20px; margin-bottom: 8px; color: #00b37e; }
-        p.subtitle { font-size: 14px; color: #8d8d99; margin-bottom: 20px; }
-        .preview-box { width: 140px; height: 140px; border: 2px dashed #323238; border-radius: 12px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; background: #121214; overflow: hidden; position: relative; }
-        .preview-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        .preview-placeholder { font-size: 13px; color: #7c7c8a; }
-        .btn-choose { display: block; width: 100%; padding: 14px; border-radius: 8px; background: #00875f; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; border: none; margin-bottom: 12px; transition: 0.2s; }
-        .btn-choose:hover { background: #00b37e; }
-        .btn-upload { display: none; width: 100%; padding: 14px; border-radius: 8px; background: #8257e5; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; border: none; }
-        .btn-upload:hover { background: #996dff; }
-        .status { margin-top: 16px; font-size: 14px; min-height: 24px; font-weight: 500; }
+        p.subtitle { font-size: 13px; color: #8d8d99; margin-bottom: 18px; line-height: 1.5; }
+        .target-selector { display: flex; gap: 8px; margin-bottom: 16px; }
+        .target-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #323238; background: #18181b; color: #a1a1aa; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .target-btn.active { background: #00875f; color: #fff; border-color: #00b37e; }
+        .btn-choose { display: block; width: 100%; padding: 15px; border-radius: 10px; background: #8257e5; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; border: none; margin-bottom: 12px; transition: 0.2s; box-shadow: 0 4px 12px rgba(130,87,229,0.3); }
+        .btn-choose:hover { background: #996dff; }
+        .status { margin-top: 14px; font-size: 14px; min-height: 24px; font-weight: 500; line-height: 1.5; }
         .status.success { color: #04d361; }
         .status.error { color: #f75a68; }
+        .status.info { color: #38bdf8; }
         input[type="file"] { display: none; }
-        .tip { font-size: 12px; color: #666; margin-top: 16px; }
+        .tip { font-size: 12px; color: #71717a; margin-top: 16px; border-top: 1px solid #27272a; padding-top: 12px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>📱 Chọn Ảnh Từ Thư Viện</h1>
-        <p class="subtitle">Chạm vào nút bên dưới để mở Album / Thư viện ảnh của điện thoại và nạp vào Minecraft</p>
+        <h1>📱 Nạp Ảnh Totem & Túi Đồ</h1>
+        <p class="subtitle">Có thể nạp từ bất kỳ thiết bị nào (máy tính, điện thoại khác kết nối cùng WiFi) sang máy đang chơi Minecraft</p>
 
-        <div class="preview-box" id="previewBox">
-            <span class="preview-placeholder" id="placeholder">Xem trước ảnh</span>
-            <img id="previewImg" style="display:none;" />
+        <div class="target-selector">
+            <button class="target-btn active" id="btnTotem" onclick="setTarget('totem')">🗡 Totem Cầm Tay</button>
+            <button class="target-btn" id="btnInv" onclick="setTarget('inv')">🎒 Giao Diện Túi Đồ</button>
         </div>
 
-        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" />
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" multiple />
         
-        <button class="btn-choose" id="chooseBtn" onclick="document.getElementById('fileInput').click()">
-            🖼 Mở Thư Viện Ảnh (Gallery)
-        </button>
-
-        <button class="btn-upload" id="uploadBtn" onclick="uploadImage()">
-            ⬆ Tải Lên Minecraft
+        <button class="btn-choose" onclick="document.getElementById('fileInput').click()">
+            🖼 Chọn Ảnh Từ Thư Viện (Hỗ Trợ Nhiều Ảnh)
         </button>
 
         <div class="status" id="status"></div>
-        <div class="tip">Sau khi tải lên thành công, hãy chuyển lại vào game để thấy totem mới ngay lập tức!</div>
+        <div class="tip">Ảnh được tải lên sẽ tự động nạp vào game ngay lập tức mà không cần bấm thêm nút!</div>
     </div>
 
     <script>
-        let selectedFile = null;
+        let currentTarget = 'totem';
         const fileInput = document.getElementById('fileInput');
-        const previewImg = document.getElementById('previewImg');
-        const placeholder = document.getElementById('placeholder');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const chooseBtn = document.getElementById('chooseBtn');
         const status = document.getElementById('status');
 
-        fileInput.addEventListener('change', function(e) {
-            if (e.target.files && e.target.files[0]) {
-                selectedFile = e.target.files[0];
-                const reader = new FileReader();
-                reader.onload = function(evt) {
-                    previewImg.src = evt.target.result;
-                    previewImg.style.display = 'block';
-                    placeholder.style.display = 'none';
-                    uploadBtn.style.display = 'block';
-                    chooseBtn.innerText = '🔄 Chọn Ảnh Khác';
-                    status.className = 'status';
-                    status.innerText = '';
-                };
-                reader.readAsDataURL(selectedFile);
-            }
-        });
-
-        async function uploadImage() {
-            if (!selectedFile) return;
-            status.className = 'status';
-            status.innerText = 'Đang tải lên...';
-            uploadBtn.disabled = true;
-
-            try {
-                const formData = new FormData();
-                formData.append('file', selectedFile, selectedFile.name);
-                const resp = await fetch('/upload', {
-                    method: 'POST',
-                    headers: { 'X-Filename': encodeURIComponent(selectedFile.name) },
-                    body: selectedFile
-                });
-                const res = await resp.json();
-                if (res.success) {
-                    status.className = 'status success';
-                    status.innerHTML = '✔ Đã nạp thành công: <b>' + res.name + '</b>!<br>Hãy quay lại game để xem Totem.';
-                    uploadBtn.style.display = 'none';
-                } else {
-                    status.className = 'status error';
-                    status.innerText = '✗ Thất bại: ' + (res.error || 'Lỗi không xác định');
-                    uploadBtn.disabled = false;
-                }
-            } catch (err) {
-                status.className = 'status error';
-                status.innerText = '✗ Lỗi kết nối: ' + err.message;
-                uploadBtn.disabled = false;
-            }
+        function setTarget(t) {
+            currentTarget = t;
+            document.getElementById('btnTotem').className = 'target-btn' + (t === 'totem' ? ' active' : '');
+            document.getElementById('btnInv').className = 'target-btn' + (t === 'inv' ? ' active' : '');
         }
+
+        fileInput.addEventListener('change', async function(e) {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+
+            status.className = 'status info';
+            status.innerText = 'Đang tự động nạp ' + files.length + ' ảnh...';
+
+            let successCount = 0;
+            let lastError = '';
+
+            for (let i = 0; i < files.length; i++) {
+                const f = files[i];
+                status.innerText = 'Đang nạp ' + (i + 1) + '/' + files.length + ': ' + f.name;
+                try {
+                    const resp = await fetch('/upload', {
+                        method: 'POST',
+                        headers: {
+                            'X-Filename': encodeURIComponent(f.name),
+                            'X-Target': currentTarget
+                        },
+                        body: f
+                    });
+                    const res = await resp.json();
+                    if (res.success) {
+                        successCount++;
+                    } else {
+                        lastError = res.error || 'Lỗi server';
+                    }
+                } catch (err) {
+                    lastError = err.message;
+                }
+            }
+
+            if (successCount === files.length) {
+                status.className = 'status success';
+                status.innerHTML = '✔ Đã nạp thành công <b>' + successCount + ' ảnh</b>!<br>Minecraft đã tự động cập nhật ngay lập tức.';
+            } else if (successCount > 0) {
+                status.className = 'status info';
+                status.innerHTML = '✔ Đã nạp thành công ' + successCount + '/' + files.length + ' ảnh.<br>Lỗi: ' + lastError;
+            } else {
+                status.className = 'status error';
+                status.innerText = '✗ Thất bại: ' + lastError;
+            }
+            fileInput.value = '';
+        });
     </script>
 </body>
 </html>
@@ -250,7 +267,9 @@ public class TotemWebServer {
                     baseName = "totem_" + baseName.replaceAll("^[_.]+", "");
                 }
 
-                Path targetDir = TotemManager.getInstance().getImagesDir();
+                String targetParam = exchange.getRequestHeaders().getFirst("X-Target");
+                boolean isInv = "inv".equalsIgnoreCase(targetParam);
+                Path targetDir = isInv ? TotemManager.getInstance().getInventoryGuiDir() : TotemManager.getInstance().getImagesDir();
                 if (!Files.exists(targetDir)) {
                     Files.createDirectories(targetDir);
                 }
@@ -268,7 +287,14 @@ public class TotemWebServer {
                 // Trigger reload in Minecraft
                 MinecraftClient client = MinecraftClient.getInstance();
                 if (client != null) {
-                    client.execute(() -> TotemManager.getInstance().rescanImages());
+                    client.execute(() -> {
+                        if (isInv) {
+                            TotemManager.getInstance().scanInventoryImages();
+                            TotemManager.getInstance().loadInventoryGuiTexture();
+                        } else {
+                            TotemManager.getInstance().rescanImages();
+                        }
+                    });
                 }
 
                 String finalName = targetFile.getFileName().toString();

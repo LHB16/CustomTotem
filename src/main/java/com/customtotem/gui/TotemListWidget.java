@@ -185,7 +185,7 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             if (textRenderer.getWidth(name) > 130) {
                 name = textRenderer.trimToWidth(name, 120) + "...";
             }
-            context.drawTextWithShadow(textRenderer, Text.literal(name), x + 30, y + 4, isCurrent ? 0x55FF55 : 0xFFFFFF);
+            context.drawTextWithShadow(textRenderer, Text.literal(name), x + 30, y + 4, isCurrent ? 0xFF55FF55 : 0xFFFFFFFF);
 
             String info = entry.getWidth() + "x" + entry.getHeight();
             if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
@@ -197,7 +197,7 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             } else if (entry.getTransform().getScale() != 1.0f || entry.getTransform().getOffsetX() != 0.0f || entry.getTransform().getOffsetY() != 0.0f) {
                 info += " §e[Custom]";
             }
-            context.drawTextWithShadow(textRenderer, Text.literal(info), x + 30, y + 16, 0x888888);
+            context.drawTextWithShadow(textRenderer, Text.literal(info), x + 30, y + 16, 0xFF888888);
 
             // Position and render buttons on the right side
             int currentRight = x + width;

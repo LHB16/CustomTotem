@@ -43,12 +43,12 @@ public class TotemManagerScreen extends Screen {
                 }
         ).dimensions(startX, topBarY, btnWidth, 20).build());
 
-        // Button 2: Mobile Photo Gallery Web Uploader
+        // Button 2: Download by URL directly in game (No browser crash!)
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📱 Thư Viện"),
+                Text.literal("🌐 Tải Link"),
                 btn -> {
                     if (this.client != null) {
-                        this.client.setScreen(new WebGalleryScreen(this));
+                        this.client.setScreen(new DownloadUrlScreen(this));
                     }
                 }
         ).dimensions(startX + (btnWidth + btnSpacing), topBarY, btnWidth, 20).build());
@@ -128,7 +128,7 @@ public class TotemManagerScreen extends Screen {
     private void openFileDialog() {
         if (com.customtotem.util.PlatformUtil.isAndroid()) {
             if (this.client != null) {
-                this.client.setScreen(new WebGalleryScreen(this));
+                this.client.setScreen(new FolderBrowserScreen(this));
             }
             return;
         }
@@ -195,7 +195,7 @@ public class TotemManagerScreen extends Screen {
         super.render(context, mouseX, mouseY, tickDelta);
 
         // Title
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 8, 0xFFFFFFFF);
 
         // Active Folder Label
         Path activeFolder = TotemManager.getInstance().getImagesDir();
@@ -209,7 +209,7 @@ public class TotemManagerScreen extends Screen {
                 Text.literal("Folder: " + tag + "§f" + folderName),
                 this.width / 2,
                 48,
-                0xAAAAAA
+                0xFFAAAAAA
         );
 
         // Auto-refresh list when background loading completes
@@ -239,7 +239,7 @@ public class TotemManagerScreen extends Screen {
                     Text.literal("§a" + TotemManager.getInstance().getReloadStatus()),
                     cx,
                     cy - 14,
-                    0xFFFFFF
+                    0xFFFFFFFF
             );
 
             // Progress bar
@@ -260,32 +260,32 @@ public class TotemManagerScreen extends Screen {
                     Text.literal("§7(Đang chạy nền, game không bị đơ)"),
                     cx,
                     cy + 12,
-                    0x888888
+                    0xFF888888
             );
         } else if (TotemManager.getInstance().getEntries().isEmpty()) {
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§7No custom totems found in active folder."),
+                    Text.literal("§7Chưa có ảnh Totem nào trong thư mục hiện tại."),
                     this.width / 2,
                     this.height / 2 - 12,
-                    0xAAAAAA
+                    0xFFAAAAAA
             );
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§eClick '📁 Folder' to choose any folder (Downloads, Pictures, etc.)"),
+                    Text.literal("§eBấm '📁 Thư Mục' để chọn ảnh từ máy hoặc '🌐 Tải Link' để dán URL"),
                     this.width / 2,
                     this.height / 2 + 2,
-                    0xFFFF55
+                    0xFFFFFF55
             );
         }
 
         // Hint at the bottom
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§8[Tip: Mobile: Click '📁 Folder' to select your photos. PC: Drag & Drop is supported!]"),
+                Text.literal("§8[Mẹo: Bấm '📁 Thư Mục' để lấy ảnh từ Downloads/Pictures hoặc '🌐 Tải Link' để dán link ảnh]"),
                 this.width / 2,
                 this.height - 36,
-                0x888888
+                0xFF888888
         );
     }
 }
