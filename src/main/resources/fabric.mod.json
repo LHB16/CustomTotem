@@ -7,7 +7,10 @@
   "authors": [
     "BinhLH"
   ],
-  "contact": {},
+  "contact": {
+    "homepage": "https://github.com/LHB16/CustomTotem",
+    "sources": "https://github.com/LHB16/CustomTotem"
+  },
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
