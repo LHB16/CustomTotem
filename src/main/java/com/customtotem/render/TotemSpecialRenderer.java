@@ -2,6 +2,7 @@ package com.customtotem.render;
 
 import com.customtotem.manager.TotemManager;
 import com.customtotem.model.TotemEntry;
+import com.customtotem.model.TotemTextureTransform;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.render.VertexConsumer;
@@ -10,6 +11,7 @@ import net.minecraft.client.render.item.model.special.SpecialModelRenderer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.item.ItemDisplayContext;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
@@ -32,20 +34,34 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
             return;
         }
 
+        Identifier renderTexId = entry.getTextureId();
+        boolean useFallback = false;
         if (!entry.isTextureRegistered()) {
-            TotemManager.getInstance().ensureTextureRegistered(entry);
-            if (!entry.isTextureRegistered()) {
+            TotemManager.getInstance().ensureTextureRegisteredAsync(entry, null);
+            if (entry.getThumbnailTextureId() != null) {
+                renderTexId = entry.getThumbnailTextureId();
+                useFallback = true;
+            } else {
                 return;
             }
         }
 
         // Millisecond-based timing ensures smooth playback at 30, 45, 60 FPS
-        long nowMs = Util.getMeasuringTimeMs();
-        float[] uvs = entry.getRenderUVs(nowMs);
-        final float u0 = uvs[0];
-        final float u1 = uvs[1];
-        final float v0 = uvs[2]; // Top
-        final float v1 = uvs[3]; // Bottom
+        final float u0, u1, v0, v1;
+        if (useFallback) {
+            TotemTextureTransform t = entry.getTransform();
+            u0 = t.isFlipX() ? 1.0f : 0.0f;
+            u1 = t.isFlipX() ? 0.0f : 1.0f;
+            v0 = t.isFlipY() ? 1.0f : 0.0f;
+            v1 = t.isFlipY() ? 0.0f : 1.0f;
+        } else {
+            long nowMs = Util.getMeasuringTimeMs();
+            float[] uvs = entry.getRenderUVs(nowMs);
+            u0 = uvs[0];
+            u1 = uvs[1];
+            v0 = uvs[2];
+            v1 = uvs[3];
+        }
 
         float[] bounds = entry.getQuadBounds();
         final float x0 = bounds[0];
@@ -60,7 +76,9 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
         final boolean unshaded = fullbright || isFloating || displayContext == ItemDisplayContext.GUI;
         final int renderLight = unshaded ? 0x00F000F0 : light;
 
-        RenderLayer layer = entry.getRenderLayer(unshaded);
+        RenderLayer layer = useFallback
+                ? (unshaded ? RenderLayers.eyes(renderTexId) : RenderLayers.entityTranslucent(renderTexId))
+                : entry.getRenderLayer(unshaded);
         if (layer == null) return;
 
         final float southNy = unshaded ? 1.0f : 0.0f;

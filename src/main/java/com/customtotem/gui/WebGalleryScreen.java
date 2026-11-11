@@ -15,7 +15,7 @@ public class WebGalleryScreen extends Screen {
     private long statusExpireTime = 0;
 
     public WebGalleryScreen(Screen parent) {
-        super(Text.literal("Chọn Ảnh Từ Thư Viện (Mobile Gallery)"));
+        super(Text.literal("Web Gallery & WiFi Uploader"));
         this.parent = parent;
         TotemWebServer.getInstance().start();
     }
@@ -28,31 +28,31 @@ public class WebGalleryScreen extends Screen {
 
         // Button 1: Open browser directly
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🌐 Mở Trình Duyệt Điện Thoại"),
+                Text.literal("Open Browser"),
                 btn -> {
                     String url = TotemWebServer.getInstance().getUrl();
                     try {
                         Util.getOperatingSystem().open(url);
-                        setStatus("§aĐang mở trình duyệt: " + url);
+                        setStatus("§aOpening browser: " + url);
                     } catch (Exception e) {
-                        setStatus("§cKhông thể tự mở. Hãy tự vào: " + url);
+                        setStatus("§cCannot open browser. Please visit: " + url);
                     }
                 }
         ).dimensions(centerX - btnWidth / 2, startY, btnWidth, 20).build());
 
         // Button 2: Copy Link to clipboard
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📋 Sao Chép Link (Copy URL)"),
+                Text.literal("Copy URL"),
                 btn -> {
                     String url = TotemWebServer.getInstance().getUrl();
                     MinecraftClient.getInstance().keyboard.setClipboard(url);
-                    setStatus("§aĐã sao chép link: " + url + " vào bộ nhớ tạm!");
+                    setStatus("§aCopied link: " + url + " to clipboard!");
                 }
         ).dimensions(centerX - btnWidth / 2, startY + 26, btnWidth, 20).build());
 
         // Button 3: Rescan and Return
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("🔄 Đã Tải Ảnh Xong - Cập Nhật Ngay"),
+                Text.literal("Refresh & Return"),
                 btn -> {
                     TotemManager.getInstance().rescanImages();
                     if (parent instanceof TotemManagerScreen tms) {
@@ -64,7 +64,7 @@ public class WebGalleryScreen extends Screen {
 
         // Button 4: Back
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Quay Lại"),
+                Text.literal("Back"),
                 btn -> this.close()
         ).dimensions(centerX - btnWidth / 2, startY + 84, btnWidth, 20).build());
     }
@@ -91,7 +91,7 @@ public class WebGalleryScreen extends Screen {
         String lanUrl = TotemWebServer.getInstance().getLanUrl();
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§7Trên máy này: §e" + localUrl + " §7| Thiết bị khác (cùng WiFi): §a" + lanUrl),
+                Text.literal("§7Local: §e" + localUrl + " §7| Other Devices (Same WiFi): §a" + lanUrl),
                 this.width / 2,
                 34,
                 0xFFFFFFFF
@@ -99,14 +99,14 @@ public class WebGalleryScreen extends Screen {
 
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§e💡 Mẹo tránh văng game: Dùng máy tính hoặc điện thoại khác truy cập link xanh ở trên để nạp ảnh"),
+                Text.literal("§eTip: Access the green link from your phone or PC browser on the same WiFi"),
                 this.width / 2,
                 50,
                 0xFFFFFF55
         );
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§fHoặc sử dụng tính năng '🌐 Tải Link' hay '📁 Thư Mục' để chọn ảnh trực tiếp trong game!"),
+                Text.literal("§fOr use the 'Download' or 'Folder' buttons in-game!"),
                 this.width / 2,
                 64,
                 0xFFDDDDDD

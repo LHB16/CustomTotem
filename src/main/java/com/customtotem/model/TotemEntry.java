@@ -3,6 +3,7 @@ package com.customtotem.model;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.texture.NativeImageBackedTexture;
+import net.minecraft.client.texture.TextureManager;
 import net.minecraft.util.Identifier;
 
 public class TotemEntry {
@@ -252,6 +253,24 @@ public class TotemEntry {
 
     public void setThumbnailTexture(NativeImageBackedTexture thumbnailTexture) {
         this.thumbnailTexture = thumbnailTexture;
+    }
+
+    public void unloadTexture(TextureManager tm) {
+        if (this.textureId != null && tm != null) {
+            tm.destroyTexture(this.textureId);
+        }
+        if (this.texture != null) {
+            this.texture.close();
+            this.texture = null;
+        }
+        this.textureRegistered = false;
+        this.cachedRenderLayer = null;
+        this.cachedEmissiveRenderLayer = null;
+        invalidatePrecomputedCache();
+    }
+
+    public boolean isLoadedInRam() {
+        return this.textureRegistered && this.texture != null;
     }
 
     public void invalidatePrecomputedCache() {

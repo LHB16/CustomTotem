@@ -40,9 +40,9 @@ public class TotemManagerScreen extends Screen {
             int totalRowWidth = (btnWidth * btnCount) + (btnSpacing * (btnCount - 1));
             int startX = (this.width - totalRowWidth) / 2;
 
-            // Row 1: Thư Mục, Tải Link, Quét Lại
+            // Row 1: Folder, Download, Rescan
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("📁 Thư Mục"),
+                    Text.literal("Folder"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new FolderBrowserScreen(this));
@@ -51,7 +51,7 @@ public class TotemManagerScreen extends Screen {
             ).dimensions(startX, row1Y, btnWidth, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("🌐 Tải Link"),
+                    Text.literal("Download"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new DownloadUrlScreen(this));
@@ -60,11 +60,11 @@ public class TotemManagerScreen extends Screen {
             ).dimensions(startX + (btnWidth + btnSpacing), row1Y, btnWidth, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("🔄 Quét Lại"),
+                    Text.literal("Rescan"),
                     btn -> TotemManager.getInstance().rescanImages(this::refreshList)
             ).dimensions(startX + (btnWidth + btnSpacing) * 2, row1Y, btnWidth, 20).build());
 
-            // Row 2: Mode, Display, Túi Đồ
+            // Row 2: Mode, Display, Inventory
             modeButton = ButtonWidget.builder(
                     getModeButtonText(),
                     btn -> {
@@ -75,7 +75,7 @@ public class TotemManagerScreen extends Screen {
             this.addDrawableChild(modeButton);
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("⚙ Display"),
+                    Text.literal("Display"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new DisplaySettingsScreen(this));
@@ -84,7 +84,7 @@ public class TotemManagerScreen extends Screen {
             ).dimensions(startX + (btnWidth + btnSpacing), row2Y, btnWidth, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("🎒 Túi Đồ"),
+                    Text.literal("Inventory"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new InventoryGuiSettingsScreen(this));
@@ -104,7 +104,7 @@ public class TotemManagerScreen extends Screen {
 
             // Button 1: Folder Browser
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("📁 Thư Mục"),
+                    Text.literal("Folder"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new FolderBrowserScreen(this));
@@ -114,7 +114,7 @@ public class TotemManagerScreen extends Screen {
 
             // Button 2: Download by URL
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("🌐 Tải Link"),
+                    Text.literal("Download"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new DownloadUrlScreen(this));
@@ -124,7 +124,7 @@ public class TotemManagerScreen extends Screen {
 
             // Button 3: Rescan current folder
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("🔄 Quét Lại"),
+                    Text.literal("Rescan"),
                     btn -> TotemManager.getInstance().rescanImages(this::refreshList)
             ).dimensions(startX + (btnWidth + btnSpacing) * 2, topBarY, btnWidth, 20).build());
 
@@ -140,7 +140,7 @@ public class TotemManagerScreen extends Screen {
 
             // Button 5: Display Settings
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("⚙ Display"),
+                    Text.literal("Display"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new DisplaySettingsScreen(this));
@@ -150,7 +150,7 @@ public class TotemManagerScreen extends Screen {
 
             // Button 6: Inventory GUI Background Settings
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("🎒 Túi Đồ"),
+                    Text.literal("Inventory"),
                     btn -> {
                         if (this.client != null) {
                             this.client.setScreen(new InventoryGuiSettingsScreen(this));
@@ -169,22 +169,31 @@ public class TotemManagerScreen extends Screen {
         this.addDrawableChild(listWidget);
 
         // Scroll helper buttons on the right side
-        int scrollBtnX = this.width - 24;
+        int scrollBtnX = this.width - 28;
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("▲"),
+                Text.literal("Up"),
                 btn -> listWidget.scroll(-96)
-        ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
+        ).dimensions(scrollBtnX, listY + 2, 24, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("▼"),
+                Text.literal("Down"),
                 btn -> listWidget.scroll(96)
-        ).dimensions(scrollBtnX, listY + listHeight - 22, 18, 20).build());
+        ).dimensions(scrollBtnX, listY + listHeight - 22, 24, 20).build());
 
-        // Done button
+        // Clean RAM and Done buttons on the bottom
+        int bottomBtnW = 90;
+        this.addDrawableChild(ButtonWidget.builder(
+                Text.literal("Clean RAM"),
+                btn -> {
+                    TotemManager.getInstance().unloadInactiveTotems();
+                    refreshList();
+                }
+        ).dimensions(this.width / 2 - bottomBtnW - 4, this.height - 25, bottomBtnW, 20).build());
+
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("Done"),
                 btn -> this.close()
-        ).dimensions(this.width / 2 - 75, this.height - 25, 150, 20).build());
+        ).dimensions(this.width / 2 + 4, this.height - 25, bottomBtnW, 20).build());
     }
 
     private Text getModeButtonText() {
@@ -329,7 +338,7 @@ public class TotemManagerScreen extends Screen {
 
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§7(Đang chạy nền, game không bị đơ)"),
+                    Text.literal("§7(Running in background, game is not frozen)"),
                     cx,
                     cy + 12,
                     0xFF888888
@@ -337,14 +346,14 @@ public class TotemManagerScreen extends Screen {
         } else if (TotemManager.getInstance().getEntries().isEmpty()) {
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§7Chưa có ảnh Totem nào trong thư mục hiện tại."),
+                    Text.literal("§7No Totem images found in current folder."),
                     this.width / 2,
                     this.height / 2 - 12,
                     0xFFAAAAAA
             );
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§eBấm '📁 Thư Mục' để chọn ảnh từ máy hoặc '🌐 Tải Link' để dán URL"),
+                    Text.literal("§eClick 'Folder' to browse files, or 'Download' to enter URL"),
                     this.width / 2,
                     this.height / 2 + 2,
                     0xFFFFFF55
@@ -354,7 +363,7 @@ public class TotemManagerScreen extends Screen {
         // Hint at the bottom
         context.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("§8[Mẹo: Bấm '📁 Thư Mục' để lấy ảnh từ Downloads/Pictures hoặc '🌐 Tải Link' để dán link ảnh]"),
+                Text.literal("§8[Tip: Drag & drop PNG files directly into this window to add them]"),
                 this.width / 2,
                 this.height - 36,
                 0xFF888888

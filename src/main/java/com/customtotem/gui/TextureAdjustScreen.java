@@ -8,6 +8,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 
 public class TextureAdjustScreen extends Screen {
     private static final int[] RESOLUTION_OPTIONS = {0, 16, 32, 64, 128, 256, 512, 1024};
@@ -117,6 +118,7 @@ public class TextureAdjustScreen extends Screen {
 
     @Override
     protected void init() {
+        TotemManager.getInstance().ensureTextureRegistered(entry);
         isSideBySide = this.width >= 350;
 
         int listX;
@@ -304,7 +306,7 @@ public class TextureAdjustScreen extends Screen {
         // Row 6: Grid Preset / Manual Split
         Text gridLabel = Text.literal("Grid: " + (entry.getFrameCount() > 1
                 ? ("§b" + entry.getColumns() + "x" + entry.getRows() + " (" + entry.getFrameCount() + "f)")
-                : "§71x1 (Tĩnh)"));
+                : "§71x1 (Static)"));
         ButtonWidget gridButton = ButtonWidget.builder(
                 gridLabel,
                 btn -> cycleGridPreset()
@@ -349,17 +351,17 @@ public class TextureAdjustScreen extends Screen {
         this.addDrawableChild(settingsList);
 
         // Scroll helper buttons if there's horizontal room
-        if (this.width >= listX + listW + 24) {
+        if (this.width >= listX + listW + 28) {
             int scrollBtnX = listX + listW + 2;
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▲"),
+                    Text.literal("Up"),
                     btn -> settingsList.scroll(-60)
-            ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + 2, 24, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▼"),
+                    Text.literal("Down"),
                     btn -> settingsList.scroll(60)
-            ).dimensions(scrollBtnX, listY + listH - 22, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + listH - 22, 24, 20).build());
         }
     }
 
@@ -382,19 +384,37 @@ public class TextureAdjustScreen extends Screen {
         context.fill(previewX, previewY, previewX + boxSize, previewY + boxSize, 0xFF141414);
 
         // Draw Totem Texture inside preview box
-        if (entry.getTextureId() != null) {
+        Identifier drawTex = entry.isTextureRegistered() ? entry.getTextureId() : entry.getThumbnailTextureId();
+        if (drawTex != null) {
             float[] bounds = entry.getQuadBounds();
             int qx1 = (int) (previewX + bounds[0] * boxSize);
             int qx2 = (int) (previewX + bounds[1] * boxSize);
             int qy1 = (int) (previewY + (1.0f - bounds[3]) * boxSize);
             int qy2 = (int) (previewY + (1.0f - bounds[2]) * boxSize);
 
-            long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
-            float[] uvs = entry.getRenderUVs(nowMs);
+            float u0, u1, v0, v1;
+            if (entry.isTextureRegistered()) {
+                long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
+                float[] uvs = entry.getRenderUVs(nowMs);
+                u0 = uvs[0];
+                u1 = uvs[1];
+                v0 = uvs[2];
+                v1 = uvs[3];
+            } else {
+                TotemTextureTransform t = entry.getTransform();
+                u0 = t.isFlipX() ? 1.0f : 0.0f;
+                u1 = t.isFlipX() ? 0.0f : 1.0f;
+                v0 = t.isFlipY() ? 1.0f : 0.0f;
+                v1 = t.isFlipY() ? 0.0f : 1.0f;
+            }
 
             context.enableScissor(previewX, previewY, previewX + boxSize, previewY + boxSize);
-            context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, uvs[0], uvs[1], uvs[2], uvs[3]);
+            context.drawTexturedQuad(drawTex, qx1, qy1, qx2, qy2, u0, u1, v0, v1);
             context.disableScissor();
+
+            if (!entry.isTextureRegistered()) {
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§eLoading..."), previewX + boxSize / 2, previewY + boxSize / 2 - 4, 0xFFFFFFFF);
+            }
         }
 
         // Draw outline 1:1 canvas frame
@@ -419,9 +439,9 @@ public class TextureAdjustScreen extends Screen {
             context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(line2), textCenterX, textY + 10, 0xFFAAAAAA);
 
             if (entry.isVramCritical()) {
-                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao!"), textCenterX, textY + 20, 0xFFFF5555);
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ High VRAM!"), textCenterX, textY + 20, 0xFFFF5555);
             } else if (entry.isVramHigh()) {
-                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§e⚠ VRAM khá cao"), textCenterX, textY + 20, 0xFFFFFF55);
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§e⚠ Moderate VRAM"), textCenterX, textY + 20, 0xFFFFFF55);
             }
         } else {
             String currentResStr = (transform.getResolution() <= 0) ? "Native" : (transform.getResolution() + "x" + transform.getResolution());
@@ -432,7 +452,7 @@ public class TextureAdjustScreen extends Screen {
             context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7" + resText), textCenterX, textY, 0xFFAAAAAA);
 
             if (entry.isVramCritical()) {
-                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ VRAM cao (>32MB)!"), textCenterX, textY + 10, 0xFFFF5555);
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§c⚠ High VRAM (>32MB)!"), textCenterX, textY + 10, 0xFFFF5555);
             }
         }
     }

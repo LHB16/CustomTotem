@@ -460,9 +460,9 @@ public class TotemManager {
 
                 reloadTotal = filesToDecode.size();
                 if (reloadTotal == 0) {
-                    reloadStatus = "Tất cả " + imageFiles.size() + " Totem đã sẵn sàng.";
+                    reloadStatus = "All " + imageFiles.size() + " Totems are ready.";
                 } else {
-                    reloadStatus = "Đang nạp " + reloadTotal + " ảnh mới/thay đổi (0/" + reloadTotal + ")...";
+                    reloadStatus = "Loading " + reloadTotal + " images (0/" + reloadTotal + ")...";
                 }
 
                 AtomicInteger completedCount = new AtomicInteger(0);
@@ -478,7 +478,7 @@ public class TotemManager {
                         PreloadedTotem pre = decodeTotemFile(file, configEntry, maxSafeDim, loadFull);
                         int count = completedCount.incrementAndGet();
                         reloadCurrent = count;
-                        reloadStatus = "Đang nạp " + reloadTotal + " ảnh mới/thay đổi (" + count + "/" + reloadTotal + ")...";
+                        reloadStatus = "Loading " + reloadTotal + " images (" + count + "/" + reloadTotal + ")...";
                         return pre;
                     }, ASYNC_POOL));
                 }
@@ -605,11 +605,15 @@ public class TotemManager {
                             updateActiveCache();
                             isReloading = false;
                             if (newlyCreated.isEmpty()) {
-                                reloadStatus = "Đã cập nhật " + entries.size() + " Totem (không có thay đổi).";
+                                reloadStatus = "Updated " + entries.size() + " Totems (no changes).";
                             } else {
-                                reloadStatus = "Đã nạp xong " + entries.size() + " Totem! (" + newlyCreated.size() + " mới/cập nhật)";
+                                reloadStatus = "Loaded " + entries.size() + " Totems (" + newlyCreated.size() + " new/updated).";
                             }
                             saveConfig();
+
+                            if (mode != TotemMode.SINGLE) {
+                                prefetchActiveTotemsAsync();
+                            }
 
                             if (onComplete != null) {
                                 onComplete.run();
@@ -622,7 +626,7 @@ public class TotemManager {
             } catch (Exception e) {
                 LOGGER.error("Failed to complete async totem reload", e);
                 isReloading = false;
-                reloadStatus = "Lỗi khi nạp ảnh: " + e.getMessage();
+                reloadStatus = "Error loading images: " + e.getMessage();
             }
         });
     }
@@ -826,21 +830,129 @@ public class TotemManager {
         }
     }
 
+    private final Set<String> loadingTextureIds = Collections.synchronizedSet(new HashSet<>());
+
     public void ensureTextureRegistered(TotemEntry entry) {
         if (entry == null || entry.getTextureId() == null || entry.isTextureRegistered()) {
             return;
         }
-        synchronized (this) {
-            if (entry.isTextureRegistered()) return;
-            MinecraftClient client = MinecraftClient.getInstance();
-            if (client == null || client.getTextureManager() == null) return;
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.getTextureManager() == null) return;
 
-            if (client.isOnThread()) {
-                loadAndRegisterTexture(entry, client);
-            } else {
-                client.execute(() -> loadAndRegisterTexture(entry, client));
+        if (client.isOnThread()) {
+            loadAndRegisterTexture(entry, client);
+        } else {
+            ensureTextureRegisteredAsync(entry, null);
+        }
+    }
+
+    public void ensureTextureRegisteredAsync(TotemEntry entry, Runnable onComplete) {
+        if (entry == null || entry.getTextureId() == null || entry.isTextureRegistered()) {
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+        if (!loadingTextureIds.add(entry.getId())) {
+            return;
+        }
+
+        MinecraftClient client = MinecraftClient.getInstance();
+        Path file = getImagesDir().resolve(entry.getFileName());
+        if (!Files.exists(file)) {
+            loadingTextureIds.remove(entry.getId());
+            return;
+        }
+
+        CompletableFuture.supplyAsync(() -> {
+            try (InputStream in = Files.newInputStream(file)) {
+                NativeImage image = NativeImage.read(in);
+                int maxSafeDim = getMaxSafeTextureSize();
+                int targetRes = entry.getTransform().getResolution();
+                int safeCols = Math.max(1, entry.getColumns());
+                int safeRows = Math.max(1, entry.getRows());
+                int origFrameW = image.getWidth() / safeCols;
+                int origFrameH = image.getHeight() / safeRows;
+
+                if (targetRes <= 0) {
+                    if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
+                        int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
+                        int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                        targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
+                        if (targetRes < 16) targetRes = 16;
+                    }
+                }
+
+                if (targetRes > 0 && (origFrameW > targetRes || image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim)) {
+                    image = createResampledImage(image, entry.getColumns(), entry.getRows(), targetRes);
+                }
+                return image;
+            } catch (Exception e) {
+                LOGGER.error("Async decode failed for {}", entry.getFileName(), e);
+                return null;
+            }
+        }, ASYNC_POOL).thenAccept(decodedImage -> {
+            loadingTextureIds.remove(entry.getId());
+            if (decodedImage == null) return;
+            if (client != null) {
+                client.execute(() -> {
+                    try {
+                        if (entry.isTextureRegistered()) {
+                            decodedImage.close();
+                            if (onComplete != null) onComplete.run();
+                            return;
+                        }
+                        NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), decodedImage);
+                        if (client.getTextureManager() != null) {
+                            client.getTextureManager().registerTexture(entry.getTextureId(), texture);
+                        }
+                        entry.setTexture(texture);
+                        entry.setTextureRegistered(true);
+                        LOGGER.info("Async registered full texture for totem: {}", entry.getFileName());
+                        if (onComplete != null) onComplete.run();
+                    } catch (Exception e) {
+                        LOGGER.error("Failed to register async texture for {}", entry.getFileName(), e);
+                    }
+                });
+            }
+        });
+    }
+
+    public void prefetchActiveTotemsAsync() {
+        List<TotemEntry> active = getActiveEntries();
+        for (TotemEntry entry : active) {
+            if (!entry.isTextureRegistered()) {
+                ensureTextureRegisteredAsync(entry, null);
             }
         }
+    }
+
+    public synchronized void unloadTotemTexture(TotemEntry entry) {
+        if (entry == null) return;
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) return;
+        if (client.isOnThread()) {
+            if (client.getTextureManager() != null) {
+                entry.unloadTexture(client.getTextureManager());
+            }
+        } else {
+            client.execute(() -> {
+                if (client.getTextureManager() != null) {
+                    entry.unloadTexture(client.getTextureManager());
+                }
+            });
+        }
+    }
+
+    public synchronized void unloadInactiveTotems() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.getTextureManager() == null) return;
+        client.execute(() -> {
+            for (TotemEntry entry : entries) {
+                if (entry != currentActiveTotem && !entry.isEnabled() && entry.isLoadedInRam()) {
+                    entry.unloadTexture(client.getTextureManager());
+                }
+            }
+            System.gc();
+        });
     }
 
     private void loadAndRegisterTexture(TotemEntry entry, MinecraftClient client) {
@@ -1109,6 +1221,11 @@ public class TotemManager {
     }
 
     public synchronized void onEntryToggle(TotemEntry entry) {
+        if (!entry.isEnabled()) {
+            unloadTotemTexture(entry);
+        } else {
+            ensureTextureRegisteredAsync(entry, null);
+        }
         updateActiveCache();
         saveConfig();
         List<TotemEntry> active = getActiveEntries();
@@ -1120,19 +1237,22 @@ public class TotemManager {
                 if (!entry.isEnabled()) {
                     this.currentActiveTotem = active.get(0);
                     this.poppingTotem = this.currentActiveTotem;
-                    ensureTextureRegistered(this.currentActiveTotem);
+                    ensureTextureRegisteredAsync(this.currentActiveTotem, null);
                 }
             }
         }
         updateActiveCache();
+        if (mode != TotemMode.SINGLE) {
+            prefetchActiveTotemsAsync();
+        }
     }
 
     public synchronized void onTotemPop() {
         if (hasCustomTotem()) {
             this.poppingTotem = this.currentActiveTotem;
             advanceNextTotem();
-            if (this.currentActiveTotem != null) {
-                ensureTextureRegistered(this.currentActiveTotem);
+            if (this.currentActiveTotem != null && !this.currentActiveTotem.isTextureRegistered()) {
+                ensureTextureRegisteredAsync(this.currentActiveTotem, null);
             }
         }
     }
@@ -1163,11 +1283,14 @@ public class TotemManager {
                 this.currentActiveTotem = candidates.get(random.nextInt(candidates.size()));
             }
         }
-        if (this.currentActiveTotem != null) {
-            ensureTextureRegistered(this.currentActiveTotem);
+        if (this.currentActiveTotem != null && !this.currentActiveTotem.isTextureRegistered()) {
+            ensureTextureRegisteredAsync(this.currentActiveTotem, null);
         }
         updateActiveCache();
         saveConfig();
+        if (mode != TotemMode.SINGLE) {
+            prefetchActiveTotemsAsync();
+        }
     }
 
     public synchronized void moveUp(TotemEntry entry) {
@@ -1211,6 +1334,9 @@ public class TotemManager {
     public void setMode(TotemMode mode) {
         this.mode = mode;
         saveConfig();
+        if (mode != TotemMode.SINGLE) {
+            prefetchActiveTotemsAsync();
+        }
     }
 
     public TotemDisplaySettings getDisplaySettings() {

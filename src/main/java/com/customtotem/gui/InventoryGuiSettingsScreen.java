@@ -48,7 +48,7 @@ public class InventoryGuiSettingsScreen extends Screen {
     private MobileTab currentTab = MobileTab.SETTINGS;
 
     public InventoryGuiSettingsScreen(Screen parent) {
-        super(Text.literal("Cài Đặt Ảnh Nền Túi Đồ"));
+        super(Text.literal("Inventory Background Settings"));
         this.parent = parent;
         this.settings = TotemManager.getInstance().getInventoryGuiSettings();
     }
@@ -75,14 +75,14 @@ public class InventoryGuiSettingsScreen extends Screen {
 
             // Back button fixed at bottom-left
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Quay lại (Back)"),
+                    Text.literal("Back"),
                     btn -> this.close()
             ).dimensions(listX, this.height - 25, listW, 20).build());
         } else {
             // Narrow screen mode with Tab Switcher
             int tabW = (this.width - 24) / 2;
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal(currentTab == MobileTab.SETTINGS ? "§a⚙ Cài Đặt" : "⚙ Cài Đặt"),
+                    Text.literal(currentTab == MobileTab.SETTINGS ? "§aSettings" : "Settings"),
                     btn -> {
                         currentTab = MobileTab.SETTINGS;
                         this.clearAndInit();
@@ -90,7 +90,7 @@ public class InventoryGuiSettingsScreen extends Screen {
             ).dimensions(10, 18, tabW, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal(currentTab == MobileTab.PREVIEW ? "§a👁 Xem Trước" : "👁 Xem Trước"),
+                    Text.literal(currentTab == MobileTab.PREVIEW ? "§aPreview" : "Preview"),
                     btn -> {
                         currentTab = MobileTab.PREVIEW;
                         this.clearAndInit();
@@ -107,7 +107,7 @@ public class InventoryGuiSettingsScreen extends Screen {
 
             // Back button fixed at bottom
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Quay lại (Back)"),
+                    Text.literal("Back"),
                     btn -> this.close()
             ).dimensions(this.width / 2 - 75, this.height - 25, 150, 20).build());
         }
@@ -259,7 +259,7 @@ public class InventoryGuiSettingsScreen extends Screen {
         ).dimensions(0, 0, 48, 20).build();
 
         ButtonWidget btnFile = ButtonWidget.builder(
-                Text.literal("📁 File"),
+                Text.literal("File"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new FolderBrowserScreen(this, TotemManager.getInstance().getInventoryGuiDir()));
@@ -268,7 +268,7 @@ public class InventoryGuiSettingsScreen extends Screen {
         ).dimensions(0, 0, 48, 20).build();
 
         ButtonWidget btnLink = ButtonWidget.builder(
-                Text.literal("🌐 Link"),
+                Text.literal("Link"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new DownloadUrlScreen(this, DownloadUrlScreen.TargetType.INVENTORY_GUI));
@@ -277,7 +277,7 @@ public class InventoryGuiSettingsScreen extends Screen {
         ).dimensions(0, 0, 48, 20).build();
 
         ButtonWidget btnScan = ButtonWidget.builder(
-                Text.literal("🔃 Quét"),
+                Text.literal("Rescan"),
                 btn -> {
                     TotemManager.getInstance().scanInventoryImages();
                     TotemManager.getInstance().loadInventoryGuiTexture();
@@ -292,17 +292,17 @@ public class InventoryGuiSettingsScreen extends Screen {
         this.addDrawableChild(settingsList);
 
         // Scroll helper buttons if horizontal space permits
-        if (this.width >= listX + listW + 22) {
+        if (this.width >= listX + listW + 28) {
             int scrollBtnX = listX + listW + 2;
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▲"),
+                    Text.literal("Up"),
                     btn -> settingsList.scroll(-60)
-            ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + 2, 24, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▼"),
+                    Text.literal("Down"),
                     btn -> settingsList.scroll(60)
-            ).dimensions(scrollBtnX, listY + listH - 22, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + listH - 22, 24, 20).build());
         }
     }
 
@@ -346,33 +346,33 @@ public class InventoryGuiSettingsScreen extends Screen {
     }
 
     private Text getToggleText() {
-        return Text.literal("Bật Ảnh Túi Đồ: " + (settings.isEnabled() ? "§aBẬT (ON)" : "§cTẮT (OFF)"));
+        return Text.literal("Custom Inventory: " + (settings.isEnabled() ? "§aON" : "§cOFF"));
     }
 
     private Text getFitModeText() {
-        return Text.literal("Chế Độ Cắt: " + settings.getFitMode().getDisplayName());
+        return Text.literal("Crop Mode: " + settings.getFitMode().getDisplayName());
     }
 
     private Text getModeText() {
-        return Text.literal("Hiển Thị: " + settings.getMode().getDisplayName());
+        return Text.literal("Display: " + settings.getMode().getDisplayName());
     }
 
     private Text getSlotsOverlayText() {
-        return Text.literal("Ô Đồ Mặc Định: " + (settings.isShowVanillaSlots() ? "§aBẬT" : "§7ẨN"));
+        return Text.literal("Vanilla Slots: " + (settings.isShowVanillaSlots() ? "§aON" : "§7OFF"));
     }
 
     private Text getOpacityText() {
         int pct = Math.round(settings.getOpacity() * 100);
-        return Text.literal("Ảnh: §e" + pct + "%");
+        return Text.literal("Image: §e" + pct + "%");
     }
 
     private Text getSlotsOpacityText() {
         int pct = Math.round(settings.getVanillaSlotsOpacity() * 100);
-        return Text.literal("Ô Đồ: §e" + pct + "%");
+        return Text.literal("Slots: §e" + pct + "%");
     }
 
     private Text getZoomText() {
-        return Text.literal(String.format("Phóng To (Zoom): §b%.2fx", settings.getScale()));
+        return Text.literal(String.format("Zoom: §b%.2fx", settings.getScale()));
     }
 
     private Text getOffsetXText() {
@@ -388,9 +388,9 @@ public class InventoryGuiSettingsScreen extends Screen {
         if (name == null || name.trim().isEmpty()) {
             List<String> list = TotemManager.getInstance().getAvailableInventoryImages();
             if (list.isEmpty()) {
-                return Text.literal("§7[Chưa có ảnh]");
+                return Text.literal("§7[No images]");
             }
-            return Text.literal("§eChọn ảnh (" + list.size() + ")");
+            return Text.literal("§eSelect image (" + list.size() + ")");
         }
         if (name.length() > 16) {
             name = name.substring(0, 13) + "...";
@@ -476,7 +476,7 @@ public class InventoryGuiSettingsScreen extends Screen {
 
         // Label above preview
         context.drawCenteredTextWithShadow(this.textRenderer,
-                Text.literal("§6Túi Đồ Thật (176x166)"),
+                Text.literal("§6Live Inventory (176x166)"),
                 px + INV_WIDTH / 2, py - 12, 0xFFFFD700);
 
         // Frame Border and Background
@@ -522,15 +522,15 @@ public class InventoryGuiSettingsScreen extends Screen {
             }
 
             Text statusText = !settings.isEnabled()
-                    ? Text.literal("§c[Túi đồ custom đang TẮT]")
-                    : Text.literal("§7[Chưa chọn hình ảnh]");
+                    ? Text.literal("§c[Custom Inventory is OFF]")
+                    : Text.literal("§7[No image selected]");
             context.drawCenteredTextWithShadow(this.textRenderer, statusText,
                     px + INV_WIDTH / 2, py + INV_HEIGHT / 2 - 4, 0xFFAAAAAA);
         }
 
         // Subtitle / Drag hint below preview
         context.drawCenteredTextWithShadow(this.textRenderer,
-                Text.literal("§8🖱 Kéo để dịch • Lăn để Zoom"),
+                Text.literal("§8Drag to pan • Scroll to zoom"),
                 px + INV_WIDTH / 2, py + INV_HEIGHT + 4, 0xFF888888);
     }
 

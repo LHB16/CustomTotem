@@ -52,13 +52,14 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
     @Override
     public int getRowWidth() {
-        return Math.min(this.width - 20, 520);
+        return Math.min(this.width - 20, 560);
     }
 
     public class TotemEntryWidget extends ElementListWidget.Entry<TotemEntryWidget> {
         private final TotemEntry entry;
         private final ButtonWidget toggleButton;
         private final ButtonWidget selectButton;
+        private final ButtonWidget unloadButton;
         private final ButtonWidget editButton;
         private final ButtonWidget upButton;
         private final ButtonWidget downButton;
@@ -70,66 +71,78 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             // Toggle active button
             this.toggleButton = ButtonWidget.builder(
-                    Text.literal(entry.isEnabled() ? "§a[Active]" : "§7[Off]"),
+                    Text.literal(entry.isEnabled() ? "§aActive" : "§7Off"),
                     btn -> {
                         entry.setEnabled(!entry.isEnabled());
                         TotemManager.getInstance().onEntryToggle(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 50, 20).build();
+            ).dimensions(0, 0, 44, 20).build();
 
             // Select button
             boolean isCurrent = TotemManager.getInstance().getCurrentActiveTotem() == entry;
             this.selectButton = ButtonWidget.builder(
-                    Text.literal(isCurrent ? "§2✓ Using" : "Select"),
+                    Text.literal(isCurrent ? "§2In Use" : "Select"),
                     btn -> {
                         TotemManager.getInstance().setCurrentTotem(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 58, 20).build();
+            ).dimensions(0, 0, 50, 20).build();
             if (isCurrent) {
                 this.selectButton.active = false;
             }
 
+            // Unload texture from RAM button
+            boolean isLoaded = entry.isLoadedInRam();
+            this.unloadButton = ButtonWidget.builder(
+                    Text.literal("Unload"),
+                    btn -> {
+                        TotemManager.getInstance().unloadTotemTexture(entry);
+                        screen.refreshList();
+                    }
+            ).dimensions(0, 0, 44, 20).build();
+            this.unloadButton.active = isLoaded;
+
             // Edit / Adjust Canvas button
             this.editButton = ButtonWidget.builder(
-                    Text.literal("🖌"),
+                    Text.literal("Edit"),
                     btn -> {
                         if (MinecraftClient.getInstance() != null) {
                             MinecraftClient.getInstance().setScreen(new TextureAdjustScreen(screen, entry));
                         }
                     }
-            ).dimensions(0, 0, 24, 20).build();
+            ).dimensions(0, 0, 32, 20).build();
 
             // Move up button
             this.upButton = ButtonWidget.builder(
-                    Text.literal("▲"),
+                    Text.literal("Up"),
                     btn -> {
                         TotemManager.getInstance().moveUp(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 20, 20).build();
+            ).dimensions(0, 0, 26, 20).build();
 
             // Move down button
             this.downButton = ButtonWidget.builder(
-                    Text.literal("▼"),
+                    Text.literal("Down"),
                     btn -> {
                         TotemManager.getInstance().moveDown(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 20, 20).build();
+            ).dimensions(0, 0, 34, 20).build();
 
             // Delete button
             this.deleteButton = ButtonWidget.builder(
-                    Text.literal("§c✕"),
+                    Text.literal("§cDelete"),
                     btn -> {
                         TotemManager.getInstance().removeTotem(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 22, 20).build();
+            ).dimensions(0, 0, 42, 20).build();
 
             this.children.add(toggleButton);
             this.children.add(selectButton);
+            this.children.add(unloadButton);
             this.children.add(editButton);
             this.children.add(upButton);
             this.children.add(downButton);
@@ -203,7 +216,7 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             } else if (entry.isVramHigh()) {
                 name = "§e⚠ " + name;
             }
-            int maxNameW = Math.max(45, width - 215 - 34);
+            int maxNameW = Math.max(45, width - 290 - 34);
             if (textRenderer.getWidth(name) > maxNameW) {
                 name = textRenderer.trimToWidth(name, Math.max(30, maxNameW - 8)) + "...";
             }
@@ -214,6 +227,9 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
                 info += " (" + entry.getFrameCount() + "f, " + entry.getFps() + "fps)";
             }
             info += " " + entry.getVramBadge();
+            if (entry.isLoadedInRam()) {
+                info += " §a[RAM]";
+            }
             if (entry.getTransform().getResolution() > 0) {
                 info += " §b[" + entry.getTransform().getResolution() + "x]";
             } else if (entry.getTransform().getScale() != 1.0f || entry.getTransform().getOffsetX() != 0.0f || entry.getTransform().getOffsetY() != 0.0f) {
@@ -225,32 +241,38 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             int currentRight = x + width;
             int btnY = y + 4;
 
-            deleteButton.setX(currentRight - 22);
+            deleteButton.setX(currentRight - 42);
             deleteButton.setY(btnY);
             deleteButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 26;
+            currentRight -= 45;
 
-            downButton.setX(currentRight - 20);
+            downButton.setX(currentRight - 34);
             downButton.setY(btnY);
             downButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 23;
+            currentRight -= 37;
 
-            upButton.setX(currentRight - 20);
+            upButton.setX(currentRight - 26);
             upButton.setY(btnY);
             upButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 27;
+            currentRight -= 29;
 
-            editButton.setX(currentRight - 24);
+            editButton.setX(currentRight - 32);
             editButton.setY(btnY);
             editButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 28;
+            currentRight -= 35;
 
-            selectButton.setX(currentRight - 58);
+            unloadButton.setX(currentRight - 44);
+            unloadButton.setY(btnY);
+            unloadButton.active = entry.isLoadedInRam();
+            unloadButton.render(context, mouseX, mouseY, tickDelta);
+            currentRight -= 47;
+
+            selectButton.setX(currentRight - 50);
             selectButton.setY(btnY);
             selectButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 62;
+            currentRight -= 53;
 
-            toggleButton.setX(currentRight - 50);
+            toggleButton.setX(currentRight - 44);
             toggleButton.setY(btnY);
             toggleButton.render(context, mouseX, mouseY, tickDelta);
         }

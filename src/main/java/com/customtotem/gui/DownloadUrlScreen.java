@@ -14,8 +14,8 @@ import java.nio.file.Path;
 
 public class DownloadUrlScreen extends Screen {
     public enum TargetType {
-        TOTEM("Totem Cầm Tay"),
-        INVENTORY_GUI("Giao Diện Túi Đồ");
+        TOTEM("Held Totem"),
+        INVENTORY_GUI("Inventory GUI");
 
         private final String displayName;
 
@@ -45,7 +45,7 @@ public class DownloadUrlScreen extends Screen {
     }
 
     public DownloadUrlScreen(Screen parent, TargetType targetType) {
-        super(Text.literal("Tải Ảnh Từ Link URL Trực Tiếp"));
+        super(Text.literal("Download Image via URL"));
         this.parent = parent;
         this.targetType = targetType != null ? targetType : TargetType.TOTEM;
     }
@@ -77,21 +77,21 @@ public class DownloadUrlScreen extends Screen {
                 currentY + 12,
                 cardWidth - 64,
                 20,
-                Text.literal("URL ảnh")
+                Text.literal("Image URL")
         );
         this.urlField.setMaxLength(2048);
-        this.urlField.setPlaceholder(Text.literal("Dán link ảnh (.png/.jpg/.webp) vào đây..."));
+        this.urlField.setPlaceholder(Text.literal("Paste direct image URL (.png/.jpg/.webp) here..."));
         this.addDrawableChild(urlField);
 
         // Paste Button right next to URL field
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📋 Dán"),
+                Text.literal("Paste"),
                 btn -> {
                     if (this.client != null) {
                         String clip = this.client.keyboard.getClipboard();
                         if (clip != null && !clip.trim().isEmpty()) {
                             urlField.setText(clip.trim());
-                            setStatus("§aĐã dán link từ bộ nhớ tạm!", 0xFF55FF55);
+                            setStatus("§aPasted link from clipboard!", 0xFF55FF55);
                         }
                     }
                 }
@@ -105,16 +105,16 @@ public class DownloadUrlScreen extends Screen {
                 currentY + 12,
                 cardWidth,
                 20,
-                Text.literal("Tên file (Tùy chọn)")
+                Text.literal("File name (Optional)")
         );
         this.nameField.setMaxLength(128);
-        this.nameField.setPlaceholder(Text.literal("Tên gợi nhớ (để trống sẽ tự lấy tên ảnh)..."));
+        this.nameField.setPlaceholder(Text.literal("Custom file name (leave blank to auto-detect)..."));
         this.addDrawableChild(nameField);
         currentY += compact ? 38 : 44;
 
         // Download Action Button
         this.downloadButton = ButtonWidget.builder(
-                Text.literal("📥 Tải Về & Nạp Ngay"),
+                Text.literal("Download & Load"),
                 btn -> startDownload()
         ).dimensions(startX, currentY, cardWidth, 22).build();
         this.addDrawableChild(downloadButton);
@@ -123,7 +123,7 @@ public class DownloadUrlScreen extends Screen {
         // Bottom Navigation Buttons
         int halfW = (cardWidth - 6) / 2;
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("📁 Mở Thư Mục"),
+                Text.literal("Open Folder"),
                 btn -> {
                     Path target = getTargetDirectory();
                     if (this.client != null) {
@@ -133,14 +133,14 @@ public class DownloadUrlScreen extends Screen {
         ).dimensions(startX, currentY, halfW, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Quay Lại"),
+                Text.literal("Back"),
                 btn -> this.close()
         ).dimensions(startX + halfW + 6, currentY, halfW, 20).build());
     }
 
     private Text getTargetButtonText() {
         String color = (targetType == TargetType.TOTEM) ? "§6" : "§b";
-        return Text.literal("Mục tiêu lưu ảnh: " + color + targetType.getDisplayName());
+        return Text.literal("Save Target: " + color + targetType.getDisplayName());
     }
 
     private Path getTargetDirectory() {
@@ -155,7 +155,7 @@ public class DownloadUrlScreen extends Screen {
         if (isDownloading) return;
         String url = (urlField != null) ? urlField.getText().trim() : "";
         if (url.isEmpty()) {
-            setStatus("§c✗ Vui lòng dán link URL ảnh trước khi bấm tải!", 0xFFFF5555);
+            setStatus("§cPlease paste an image URL first!", 0xFFFF5555);
             return;
         }
 
@@ -166,7 +166,7 @@ public class DownloadUrlScreen extends Screen {
         if (downloadButton != null) {
             downloadButton.active = false;
         }
-        setStatus("§e⏳ Đang tải ảnh về máy, vui lòng đợi...", 0xFFFFFF55);
+        setStatus("§eDownloading image, please wait...", 0xFFFFFF55);
 
         ImageDownloadUtil.downloadImageAsync(url, targetDir, customName).thenAccept(result -> {
             MinecraftClient client = MinecraftClient.getInstance();
@@ -178,7 +178,7 @@ public class DownloadUrlScreen extends Screen {
                     }
 
                     if (result.success()) {
-                        setStatus("§a✔ Tải thành công: " + result.fileName() + "! Đã nạp vào game.", 0xFF55FF55);
+                        setStatus("§aSuccessfully downloaded: " + result.fileName() + "! Loaded into game.", 0xFF55FF55);
                         if (urlField != null) {
                             urlField.setText("");
                         }
@@ -198,7 +198,7 @@ public class DownloadUrlScreen extends Screen {
                             tms.refreshList();
                         }
                     } else {
-                        setStatus("§c✗ " + result.errorMessage(), 0xFFFF5555);
+                        setStatus("§c" + result.errorMessage(), 0xFFFF5555);
                     }
                 });
             }
@@ -235,7 +235,7 @@ public class DownloadUrlScreen extends Screen {
         if (this.height >= 250) {
             context.drawCenteredTextWithShadow(
                     this.textRenderer,
-                    Text.literal("§7Tải trực tiếp ảnh từ Discord, Imgur, Pinterest, Facebook... mà không cần mở trình duyệt"),
+                    Text.literal("§7Directly download images from Discord, Imgur, Pinterest, etc. without a browser"),
                     this.width / 2,
                     26,
                     0xFFAAAAAA
@@ -248,10 +248,10 @@ public class DownloadUrlScreen extends Screen {
 
         // Field Labels
         if (urlField != null) {
-            context.drawTextWithShadow(this.textRenderer, Text.literal("§fĐường link ảnh trực tiếp (URL):"), startX, urlField.getY() - 10, 0xFFFFFFFF);
+            context.drawTextWithShadow(this.textRenderer, Text.literal("§fDirect Image URL:"), startX, urlField.getY() - 10, 0xFFFFFFFF);
         }
         if (nameField != null) {
-            context.drawTextWithShadow(this.textRenderer, Text.literal("§7Tên file muốn lưu (tùy chọn):"), startX, nameField.getY() - 10, 0xFFAAAAAA);
+            context.drawTextWithShadow(this.textRenderer, Text.literal("§7File Name (Optional):"), startX, nameField.getY() - 10, 0xFFAAAAAA);
         }
 
         // Status Message

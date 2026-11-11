@@ -15,7 +15,7 @@ public class DisplaySettingsScreen extends Screen {
     private SettingsListWidget settingsList;
 
     public DisplaySettingsScreen(Screen parent) {
-        super(Text.translatable("gui.customtotem.display_settings"));
+        super(Text.literal("Display Settings"));
         this.parent = parent;
         this.settings = TotemManager.getInstance().getDisplaySettings();
     }
@@ -46,17 +46,17 @@ public class DisplaySettingsScreen extends Screen {
 
         // Fullbright toggle button
         ButtonWidget fullbrightBtn = ButtonWidget.builder(
-                Text.literal("Fullbright: " + (settings.isFullbright() ? "§aBẬT" : "§cTẮT")),
+                Text.literal("Fullbright: " + (settings.isFullbright() ? "§aON" : "§cOFF")),
                 btn -> {
                     settings.setFullbright(!settings.isFullbright());
                     TotemManager.getInstance().saveConfig();
-                    btn.setMessage(Text.literal("Fullbright: " + (settings.isFullbright() ? "§aBẬT" : "§cTẮT")));
+                    btn.setMessage(Text.literal("Fullbright: " + (settings.isFullbright() ? "§aON" : "§cOFF")));
                 }
         ).dimensions(0, 0, 240, 20).build();
         this.settingsList.addWidget(fullbrightBtn);
 
-        // Section: First Person (Góc Nhìn Thứ Nhất)
-        this.settingsList.addHeader(Text.literal("§6--- Góc Nhìn Thứ Nhất (First Person) ---"), 0xFFFFAA00);
+        // Section: First Person
+        this.settingsList.addHeader(Text.literal("§6--- First Person View ---"), 0xFFFFAA00);
 
         // FP Scale slider: range 0.1f to 1.5f
         this.settingsList.addWidget(new SliderWidget(
@@ -127,8 +127,8 @@ public class DisplaySettingsScreen extends Screen {
         };
         this.settingsList.addWidgets(fpTransX, fpTransY);
 
-        // Section: Third Person (Góc Nhìn Thứ Ba)
-        this.settingsList.addHeader(Text.literal("§b--- Góc Nhìn Thứ Ba (Third Person) ---"), 0xFF55FFFF);
+        // Section: Third Person
+        this.settingsList.addHeader(Text.literal("§b--- Third Person View ---"), 0xFF55FFFF);
 
         SliderWidget tpScale = new SliderWidget(
                 0, 0, 118, 20,
@@ -176,11 +176,11 @@ public class DisplaySettingsScreen extends Screen {
         this.settingsList.addWidgets(tpScale, tpTransY);
 
         // Section: Features
-        this.settingsList.addHeader(Text.literal("§a--- Cài Đặt Giao Diện Khác ---"), 0xFF55FF55);
+        this.settingsList.addHeader(Text.literal("§a--- Additional Settings ---"), 0xFF55FF55);
 
         // Hand Outline Settings button
         this.settingsList.addWidget(ButtonWidget.builder(
-                Text.literal("✨ Cài Đặt Viền Sáng Vật Phẩm (Outline)"),
+                Text.literal("Item Glow Outline Settings"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new HandOutlineSettingsScreen(this));
@@ -190,7 +190,7 @@ public class DisplaySettingsScreen extends Screen {
 
         // Inventory GUI Settings button
         this.settingsList.addWidget(ButtonWidget.builder(
-                Text.literal("🎒 Cài Đặt Ảnh Nền Túi Đồ"),
+                Text.literal("Inventory Background Settings"),
                 btn -> {
                     if (this.client != null) {
                         this.client.setScreen(new InventoryGuiSettingsScreen(this));
@@ -202,17 +202,17 @@ public class DisplaySettingsScreen extends Screen {
         this.addDrawableChild(settingsList);
 
         // Scroll helper buttons for touch / PojavLauncher
-        if (this.width >= listWidth + 26) {
+        if (this.width >= listWidth + 28) {
             int scrollBtnX = settingsList.getX() + listWidth + 2;
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▲"),
+                    Text.literal("Up"),
                     btn -> settingsList.scroll(-60)
-            ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + 2, 24, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▼"),
+                    Text.literal("Down"),
                     btn -> settingsList.scroll(60)
-            ).dimensions(scrollBtnX, listY + listHeight - 22, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + listHeight - 22, 24, 20).build());
         }
 
         // Fixed bottom buttons bar (ALWAYS reachable, never cut off!)
@@ -232,7 +232,7 @@ public class DisplaySettingsScreen extends Screen {
 
         // Back button
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Quay Lại (Back)"),
+                Text.literal("Back"),
                 btn -> this.close()
         ).dimensions(centerX + 3, bottomY, btnW, 20).build());
     }

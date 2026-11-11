@@ -28,18 +28,18 @@ public class HandOutlineSettingsScreen extends Screen {
             0xFFFF8800  // Sunset Orange
     };
     private static final String[] COLOR_NAMES = new String[]{
-            "Xanh Lam (Aqua)",
-            "Hồng Neon (Pink)",
-            "Đỏ Lửa (Crimson)",
-            "Vàng Kim (Gold)",
-            "Lục Bảo (Green)",
-            "Tím Neon (Purple)",
-            "Trắng Tinh (White)",
-            "Cam Hoàng Hôn (Orange)"
+            "Aqua",
+            "Neon Pink",
+            "Crimson Red",
+            "Gold",
+            "Emerald Green",
+            "Purple",
+            "White",
+            "Sunset Orange"
     };
 
     public HandOutlineSettingsScreen(Screen parent) {
-        super(Text.literal("✨ Cài Đặt Viền Sáng (Hand Outline)"));
+        super(Text.literal("Item Glow Outline Settings"));
         this.parent = parent;
         this.settings = TotemManager.getInstance().getOutlineSettings();
     }
@@ -55,34 +55,34 @@ public class HandOutlineSettingsScreen extends Screen {
         this.settingsList.setX((this.width - listWidth) / 2);
         this.settingsList.setCustomRowWidth(Math.min(listWidth - 16, 320));
 
-        // 1. Toggle Bật/Tắt Viền Sáng
+        // 1. Toggle Outline
         ButtonWidget toggleBtn = ButtonWidget.builder(
-                Text.literal("Viền Sáng: " + (settings.isEnabled() ? "§aBẬT" : "§cTẮT")),
+                Text.literal("Outline Glow: " + (settings.isEnabled() ? "§aON" : "§cOFF")),
                 btn -> {
                     settings.setEnabled(!settings.isEnabled());
                     TotemManager.getInstance().saveConfig();
-                    btn.setMessage(Text.literal("Viền Sáng: " + (settings.isEnabled() ? "§aBẬT" : "§cTẮT")));
+                    btn.setMessage(Text.literal("Outline Glow: " + (settings.isEnabled() ? "§aON" : "§cOFF")));
                 }
         ).dimensions(0, 0, 240, 20).build();
         this.settingsList.addWidget(toggleBtn);
 
-        // 2. Đối tượng áp dụng
+        // 2. Target
         ButtonWidget targetBtn = ButtonWidget.builder(
-                Text.literal("Áp dụng: " + (settings.isTotemOnly() ? "§6Chỉ Totem" : "§eTất Cả Vật Phẩm / Tay")),
+                Text.literal("Target: " + (settings.isTotemOnly() ? "§6Totem Only" : "§eAll Items / Hands")),
                 btn -> {
                     settings.setTotemOnly(!settings.isTotemOnly());
                     TotemManager.getInstance().saveConfig();
-                    btn.setMessage(Text.literal("Áp dụng: " + (settings.isTotemOnly() ? "§6Chỉ Totem" : "§eTất Cả Vật Phẩm / Tay")));
+                    btn.setMessage(Text.literal("Target: " + (settings.isTotemOnly() ? "§6Totem Only" : "§eAll Items / Hands")));
                 }
         ).dimensions(0, 0, 240, 20).build();
         this.settingsList.addWidget(targetBtn);
 
-        // Header Hiệu ứng màu
-        this.settingsList.addHeader(Text.literal("§d--- Chế Độ & Màu Sắc ---"), 0xFFFF77DD);
+        // Header Color & Mode
+        this.settingsList.addHeader(Text.literal("§d--- Color & Mode ---"), 0xFFFF77DD);
 
-        // 3. Kiểu chuyển màu
+        // 3. Mode
         ButtonWidget modeBtn = ButtonWidget.builder(
-                Text.literal("Kiểu: §b" + settings.getMode().getDisplayName()),
+                Text.literal("Mode: §b" + settings.getMode().getDisplayName()),
                 btn -> {
                     OutlineColorMode[] modes = OutlineColorMode.values();
                     int nextIdx = (settings.getMode().ordinal() + 1) % modes.length;
@@ -93,10 +93,10 @@ public class HandOutlineSettingsScreen extends Screen {
         ).dimensions(0, 0, 240, 20).build();
         this.settingsList.addWidget(modeBtn);
 
-        // 4. Nút chọn màu tĩnh nếu đang ở mode STATIC
+        // 4. Static Color
         if (settings.getMode() == OutlineColorMode.STATIC) {
             int curColor = settings.getStaticColor();
-            String curName = "Tùy Chỉnh";
+            String curName = "Custom";
             for (int i = 0; i < COLOR_PRESETS.length; i++) {
                 if (COLOR_PRESETS[i] == curColor) {
                     curName = COLOR_NAMES[i];
@@ -104,7 +104,7 @@ public class HandOutlineSettingsScreen extends Screen {
                 }
             }
             ButtonWidget colorBtn = ButtonWidget.builder(
-                    Text.literal("Màu Tĩnh: §a" + curName),
+                    Text.literal("Static Color: §a" + curName),
                     btn -> {
                         int nextIdx = 0;
                         for (int i = 0; i < COLOR_PRESETS.length; i++) {
@@ -121,13 +121,13 @@ public class HandOutlineSettingsScreen extends Screen {
             this.settingsList.addWidget(colorBtn);
         }
 
-        // 5. Slider tốc độ chuyển màu (Speed: 0.1x - 5.0x)
+        // 5. Speed Slider
         double speedVal = (settings.getSpeed() - 0.1) / (5.0 - 0.1);
         this.settingsList.addWidget(new CustomSliderWidget(
                 0, 0, 240, 20,
-                Text.literal(String.format("Tốc độ chuyển màu: %.2fx", settings.getSpeed())),
+                Text.literal(String.format("Cycle Speed: %.2fx", settings.getSpeed())),
                 speedVal,
-                () -> Text.literal(String.format("Tốc độ chuyển màu: %.2fx", settings.getSpeed())),
+                () -> Text.literal(String.format("Cycle Speed: %.2fx", settings.getSpeed())),
                 val -> {
                     float s = (float) (0.1 + val * (5.0 - 0.1));
                     settings.setSpeed(Math.round(s * 100.0f) / 100.0f);
@@ -135,16 +135,16 @@ public class HandOutlineSettingsScreen extends Screen {
                 }
         ));
 
-        // Header Kích thước & Cường độ
-        this.settingsList.addHeader(Text.literal("§6--- Kích Thước & Cường Độ Viền ---"), 0xFFFFAA00);
+        // Header Size & Glow
+        this.settingsList.addHeader(Text.literal("§6--- Size & Glow Intensity ---"), 0xFFFFAA00);
 
-        // 6. Slider độ dày viền (Width / Reach: 1.0px - 6.0px)
+        // 6. Outline Width
         double widthVal = (settings.getWidth() - 1.0) / (6.0 - 1.0);
         this.settingsList.addWidget(new CustomSliderWidget(
                 0, 0, 240, 20,
-                Text.literal(String.format("Độ dày viền (Reach): %.1f px", settings.getWidth())),
+                Text.literal(String.format("Outline Width: %.1f px", settings.getWidth())),
                 widthVal,
-                () -> Text.literal(String.format("Độ dày viền (Reach): %.1f px", settings.getWidth())),
+                () -> Text.literal(String.format("Outline Width: %.1f px", settings.getWidth())),
                 val -> {
                     float w = (float) (1.0 + val * (6.0 - 1.0));
                     settings.setWidth(Math.round(w * 10.0f) / 10.0f);
@@ -152,25 +152,25 @@ public class HandOutlineSettingsScreen extends Screen {
                 }
         ));
 
-        // 7. Slider Hào quang mờ ngoài viền (Aura Glow: 0% - 100%)
+        // 7. Aura Glow
         this.settingsList.addWidget(new CustomSliderWidget(
                 0, 0, 240, 20,
-                Text.literal(String.format("Hào quang (Aura Glow): %d%%", Math.round(settings.getAuraIntensity() * 100))),
+                Text.literal(String.format("Aura Glow: %d%%", Math.round(settings.getAuraIntensity() * 100))),
                 settings.getAuraIntensity(),
-                () -> Text.literal(String.format("Hào quang (Aura Glow): %d%%", Math.round(settings.getAuraIntensity() * 100))),
+                () -> Text.literal(String.format("Aura Glow: %d%%", Math.round(settings.getAuraIntensity() * 100))),
                 val -> {
                     settings.setAuraIntensity(val.floatValue());
                     TotemManager.getInstance().saveConfig();
                 }
         ));
 
-        // 8. Slider Độ đậm viền (Outline Rim: 10% - 100%)
+        // 8. Rim Strength
         double rimVal = (settings.getOutlineStrength() - 0.1) / (1.0 - 0.1);
         this.settingsList.addWidget(new CustomSliderWidget(
                 0, 0, 240, 20,
-                Text.literal(String.format("Độ đậm viền (Rim): %d%%", Math.round(settings.getOutlineStrength() * 100))),
+                Text.literal(String.format("Rim Strength: %d%%", Math.round(settings.getOutlineStrength() * 100))),
                 rimVal,
-                () -> Text.literal(String.format("Độ đậm viền (Rim): %d%%", Math.round(settings.getOutlineStrength() * 100))),
+                () -> Text.literal(String.format("Rim Strength: %d%%", Math.round(settings.getOutlineStrength() * 100))),
                 val -> {
                     float rim = (float) (0.1 + val * (1.0 - 0.1));
                     settings.setOutlineStrength(Math.round(rim * 100.0f) / 100.0f);
@@ -178,33 +178,33 @@ public class HandOutlineSettingsScreen extends Screen {
                 }
         ));
 
-        // 9. Slider Ánh kim lướt qua (Sheen: 0% - 100%)
+        // 9. Sheen Glint
         this.settingsList.addWidget(new CustomSliderWidget(
                 0, 0, 240, 20,
-                Text.literal(String.format("Ánh kim (Sheen Glint): %d%%", Math.round(settings.getSheen() * 100))),
+                Text.literal(String.format("Sheen Glint: %d%%", Math.round(settings.getSheen() * 100))),
                 settings.getSheen(),
-                () -> Text.literal(String.format("Ánh kim (Sheen Glint): %d%%", Math.round(settings.getSheen() * 100))),
+                () -> Text.literal(String.format("Sheen Glint: %d%%", Math.round(settings.getSheen() * 100))),
                 val -> {
                     settings.setSheen(val.floatValue());
                     TotemManager.getInstance().saveConfig();
                 }
         ));
 
-        // Thêm settingsList vào màn hình
+        // Add settingsList
         this.addDrawableChild(settingsList);
 
         // Touch scroll helper buttons
-        if (this.width >= listWidth + 26) {
+        if (this.width >= listWidth + 28) {
             int scrollBtnX = settingsList.getX() + listWidth + 2;
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▲"),
+                    Text.literal("Up"),
                     btn -> settingsList.scroll(-60)
-            ).dimensions(scrollBtnX, listY + 2, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + 2, 24, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("▼"),
+                    Text.literal("Down"),
                     btn -> settingsList.scroll(60)
-            ).dimensions(scrollBtnX, listY + listHeight - 22, 18, 20).build());
+            ).dimensions(scrollBtnX, listY + listHeight - 22, 24, 20).build());
         }
 
         // Bottom bar
@@ -214,7 +214,7 @@ public class HandOutlineSettingsScreen extends Screen {
 
         // Reset to default
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Reset Mặc Định"),
+                Text.literal("Reset Default"),
                 btn -> {
                     settings.setEnabled(true);
                     settings.setTotemOnly(false);
@@ -232,7 +232,7 @@ public class HandOutlineSettingsScreen extends Screen {
 
         // Back button
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Quay Lại (Back)"),
+                Text.literal("Back"),
                 btn -> this.close()
         ).dimensions(centerX + 3, bottomY, btnW, 20).build());
     }
