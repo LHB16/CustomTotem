@@ -36,7 +36,7 @@ public class TotemManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final TotemManager INSTANCE = new TotemManager();
 
-    private static final int CPU_CORES = PlatformUtil.isAndroid() ? 1 : Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
+    private static final int CPU_CORES = PlatformUtil.isAndroid() ? 1 : Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() / 2));
     private static final ExecutorService ASYNC_POOL = Executors.newFixedThreadPool(CPU_CORES, r -> {
         Thread t = new Thread(r, "CustomTotem-DecodeWorker");
         t.setDaemon(true);
@@ -45,10 +45,11 @@ public class TotemManager {
 
     public static int getMaxSafeTextureSize() {
         if (PlatformUtil.isAndroid()) {
-            return 4096;
+            return 2048;
         }
-        // Safe cap of 8192 ensures textures fit in all GPUs and avoids GL context threading violations
-        return 8192;
+        // Safe cap of 4096 ensures optimal performance, avoids severe memory bandwidth bottlenecks
+        // on Intel integrated GPUs (reducing uncompressed texture RAM from 268MB down to 67MB per image).
+        return 4096;
     }
 
     public record GridDetectionResult(int cols, int rows, int frameCount, int fps, int baseFps) {}
@@ -389,6 +390,28 @@ public class TotemManager {
                     return name1.compareToIgnoreCase(name2);
                 });
 
+                // Determine target active totem fileName for initial eagerly-loaded full texture
+                String targetActiveId = this.currentActiveTotem != null ? this.currentActiveTotem.getId() : (loadedConfig != null ? loadedConfig.currentTotemId : null);
+                String targetActiveFileName = null;
+                if (targetActiveId != null) {
+                    for (Map.Entry<String, TotemConfig.TotemEntryConfig> entry : configMap.entrySet()) {
+                        if (targetActiveId.equals(entry.getValue().id)) {
+                            targetActiveFileName = entry.getKey();
+                            break;
+                        }
+                    }
+                }
+                if (targetActiveFileName == null) {
+                    for (Path p : imageFiles) {
+                        String fn = p.getFileName().toString();
+                        TotemConfig.TotemEntryConfig ec = configMap.get(fn);
+                        if (ec == null || ec.enabled) {
+                            targetActiveFileName = fn;
+                            break;
+                        }
+                    }
+                }
+
                 // Diff checking: identify unchanged totems vs new/modified ones
                 Set<String> activeFileNames = new HashSet<>();
                 Map<String, TotemEntry> reusedMap = new HashMap<>();
@@ -407,13 +430,14 @@ public class TotemManager {
 
                     TotemEntry existing = existingMap.get(fileName);
                     TotemConfig.TotemEntryConfig configEntry = configMap.get(fileName);
+                    boolean isTargetActive = fileName.equals(targetActiveFileName);
 
                     boolean canReuse = existing != null
-                            && existing.isTextureRegistered()
                             && existing.getTextureId() != null
                             && existing.getLastModified() != 0
                             && existing.getLastModified() == lastMod
-                            && existing.getFileSize() == size;
+                            && existing.getFileSize() == size
+                            && (!isTargetActive || existing.isTextureRegistered());
 
                     if (canReuse) {
                         if (configEntry != null) {
@@ -444,11 +468,14 @@ public class TotemManager {
                 AtomicInteger completedCount = new AtomicInteger(0);
                 int maxSafeDim = getMaxSafeTextureSize();
 
+                final String activeFileNameRef = targetActiveFileName;
                 List<CompletableFuture<PreloadedTotem>> futures = new ArrayList<>();
                 for (Path file : filesToDecode) {
-                    TotemConfig.TotemEntryConfig configEntry = configMap.get(file.getFileName().toString());
+                    String fn = file.getFileName().toString();
+                    boolean loadFull = fn.equals(activeFileNameRef);
+                    TotemConfig.TotemEntryConfig configEntry = configMap.get(fn);
                     futures.add(CompletableFuture.supplyAsync(() -> {
-                        PreloadedTotem pre = decodeTotemFile(file, configEntry, maxSafeDim);
+                        PreloadedTotem pre = decodeTotemFile(file, configEntry, maxSafeDim, loadFull);
                         int count = completedCount.incrementAndGet();
                         reloadCurrent = count;
                         reloadStatus = "Đang nạp " + reloadTotal + " ảnh mới/thay đổi (" + count + "/" + reloadTotal + ")...";
@@ -505,9 +532,12 @@ public class TotemManager {
                                 }
 
                                 Identifier textureId = Identifier.of("customtotem", "textures/" + p.uniqueId());
-                                NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + p.uniqueId(), p.image());
-                                if (client.getTextureManager() != null) {
-                                    client.getTextureManager().registerTexture(textureId, texture);
+                                NativeImageBackedTexture texture = null;
+                                if (p.image() != null) {
+                                    texture = new NativeImageBackedTexture(() -> "customtotem/" + p.uniqueId(), p.image());
+                                    if (client.getTextureManager() != null) {
+                                        client.getTextureManager().registerTexture(textureId, texture);
+                                    }
                                 }
 
                                 Identifier thumbId = Identifier.of("customtotem", "thumbnails/" + p.uniqueId());
@@ -530,7 +560,7 @@ public class TotemManager {
                                 entry.setFileSize(p.fileSize());
                                 entry.setTextureId(textureId);
                                 entry.setTexture(texture);
-                                entry.setTextureRegistered(true);
+                                entry.setTextureRegistered(p.image() != null);
                                 entry.setThumbnailTextureId(thumbId);
                                 entry.setThumbnailTexture(thumbTexture);
 
@@ -569,6 +599,9 @@ public class TotemManager {
                             }
 
                             this.poppingTotem = this.currentActiveTotem;
+                            if (this.currentActiveTotem != null && !this.currentActiveTotem.isTextureRegistered()) {
+                                ensureTextureRegistered(this.currentActiveTotem);
+                            }
                             updateActiveCache();
                             isReloading = false;
                             if (newlyCreated.isEmpty()) {
@@ -594,7 +627,7 @@ public class TotemManager {
         });
     }
 
-    private PreloadedTotem decodeTotemFile(Path file, TotemConfig.TotemEntryConfig configEntry, int maxSafeDim) {
+    private PreloadedTotem decodeTotemFile(Path file, TotemConfig.TotemEntryConfig configEntry, int maxSafeDim, boolean loadFullImage) {
         try {
             String fileName = file.getFileName().toString();
             String idName = fileName.replace(".png", "")
@@ -664,25 +697,8 @@ public class TotemManager {
                 transform.setAnimated(true);
             }
 
-            int targetRes = (transform != null && transform.getResolution() > 0) ? transform.getResolution() : 0;
             int safeCols = Math.max(1, cols);
             int safeRows = Math.max(1, rows);
-            int origFrameW = width / safeCols;
-            int origFrameH = height / safeRows;
-
-            // Auto-clamp if oversized (e.g. 15360x15360 or frame > 512)
-            if (targetRes <= 0) {
-                if (width > maxSafeDim || height > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
-                    int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
-                    int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
-                    targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
-                    if (targetRes < 16) targetRes = 16;
-                }
-            }
-
-            if (targetRes > 0 && (origFrameW > targetRes || width > maxSafeDim || height > maxSafeDim)) {
-                image = createResampledImage(image, cols, rows, targetRes);
-            }
 
             // Extract lightweight Frame 0 thumbnail (max 128x128)
             int curW = image.getWidth();
@@ -693,6 +709,30 @@ public class TotemManager {
             int thumbH = Math.min(curFrameH, 128);
             NativeImage thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
             image.resizeSubRectTo(0, 0, curFrameW, curFrameH, thumbImage);
+
+            if (!loadFullImage) {
+                // Lazy loading: free full image immediately to save memory and avoid software resampling overhead
+                image.close();
+                image = null;
+            } else {
+                int targetRes = (transform != null && transform.getResolution() > 0) ? transform.getResolution() : 0;
+                int origFrameW = width / safeCols;
+                int origFrameH = height / safeRows;
+
+                // Auto-clamp if oversized (e.g. 15360x15360 or frame > 512)
+                if (targetRes <= 0) {
+                    if (width > maxSafeDim || height > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
+                        int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
+                        int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                        targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
+                        if (targetRes < 16) targetRes = 16;
+                    }
+                }
+
+                if (targetRes > 0 && (origFrameW > targetRes || width > maxSafeDim || height > maxSafeDim)) {
+                    image = createResampledImage(image, cols, rows, targetRes);
+                }
+            }
 
             long lastModified = 0;
             long fileSize = 0;
@@ -795,57 +835,69 @@ public class TotemManager {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client == null || client.getTextureManager() == null) return;
 
-            if (client.getTextureManager().getTexture(entry.getTextureId()) == null) {
-                Path file = getImagesDir().resolve(entry.getFileName());
-                if (Files.exists(file)) {
-                    try (InputStream in = Files.newInputStream(file)) {
-                        NativeImage image = NativeImage.read(in);
-                        int maxSafeDim = getMaxSafeTextureSize();
-                        int targetRes = entry.getTransform().getResolution();
-                        int safeCols = Math.max(1, entry.getColumns());
-                        int safeRows = Math.max(1, entry.getRows());
-                        int origFrameW = image.getWidth() / safeCols;
-                        int origFrameH = image.getHeight() / safeRows;
+            if (client.isOnThread()) {
+                loadAndRegisterTexture(entry, client);
+            } else {
+                client.execute(() -> loadAndRegisterTexture(entry, client));
+            }
+        }
+    }
 
-                        if (targetRes <= 0) {
-                            if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
-                                int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
-                                int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
-                                targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
-                                if (targetRes < 16) targetRes = 16;
-                            }
-                        }
+    private void loadAndRegisterTexture(TotemEntry entry, MinecraftClient client) {
+        if (entry == null || entry.isTextureRegistered()) return;
+        Path file = getImagesDir().resolve(entry.getFileName());
+        if (!Files.exists(file)) return;
 
-                        if (targetRes > 0 && (origFrameW > targetRes || image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim)) {
-                            image = createResampledImage(image, entry.getColumns(), entry.getRows(), targetRes);
-                        }
+        try (InputStream in = Files.newInputStream(file)) {
+            NativeImage image = NativeImage.read(in);
+            int maxSafeDim = getMaxSafeTextureSize();
+            int targetRes = entry.getTransform().getResolution();
+            int safeCols = Math.max(1, entry.getColumns());
+            int safeRows = Math.max(1, entry.getRows());
+            int origFrameW = image.getWidth() / safeCols;
+            int origFrameH = image.getHeight() / safeRows;
 
-                        NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), image);
-                        client.getTextureManager().registerTexture(entry.getTextureId(), texture);
-                        entry.setTexture(texture);
-
-                        if (entry.getThumbnailTextureId() == null || client.getTextureManager().getTexture(entry.getThumbnailTextureId()) == null) {
-                            int curW = image.getWidth();
-                            int curH = image.getHeight();
-                            int curFrameW = Math.max(1, curW / safeCols);
-                            int curFrameH = Math.max(1, curH / safeRows);
-                            int thumbW = Math.min(curFrameW, 128);
-                            int thumbH = Math.min(curFrameH, 128);
-                            NativeImage thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
-                            image.resizeSubRectTo(0, 0, curFrameW, curFrameH, thumbImage);
-
-                            Identifier thumbId = Identifier.of("customtotem", "thumbnails/" + entry.getId());
-                            NativeImageBackedTexture thumbTex = new NativeImageBackedTexture(() -> "customtotem/thumb/" + entry.getId(), thumbImage);
-                            client.getTextureManager().registerTexture(thumbId, thumbTex);
-                            entry.setThumbnailTexture(thumbTex);
-                            entry.setThumbnailTextureId(thumbId);
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("Failed to restore texture for entry: {}", entry.getFileName(), e);
-                    }
+            if (targetRes <= 0) {
+                if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
+                    int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
+                    int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                    targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
+                    if (targetRes < 16) targetRes = 16;
                 }
             }
+
+            if (targetRes > 0 && (origFrameW > targetRes || image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim)) {
+                image = createResampledImage(image, entry.getColumns(), entry.getRows(), targetRes);
+            }
+
+            NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), image);
+            if (client.getTextureManager() != null) {
+                client.getTextureManager().registerTexture(entry.getTextureId(), texture);
+            }
+            entry.setTexture(texture);
             entry.setTextureRegistered(true);
+
+            if (entry.getThumbnailTextureId() == null || client.getTextureManager() == null || client.getTextureManager().getTexture(entry.getThumbnailTextureId()) == null) {
+                int curW = image.getWidth();
+                int curH = image.getHeight();
+                int curFrameW = Math.max(1, curW / safeCols);
+                int curFrameH = Math.max(1, curH / safeRows);
+                int thumbW = Math.min(curFrameW, 128);
+                int thumbH = Math.min(curFrameH, 128);
+                NativeImage thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
+                image.resizeSubRectTo(0, 0, curFrameW, curFrameH, thumbImage);
+
+                Identifier thumbId = Identifier.of("customtotem", "thumbnails/" + entry.getId());
+                NativeImageBackedTexture thumbTex = new NativeImageBackedTexture(() -> "customtotem/thumb/" + entry.getId(), thumbImage);
+                if (client.getTextureManager() != null) {
+                    client.getTextureManager().registerTexture(thumbId, thumbTex);
+                }
+                entry.setThumbnailTexture(thumbTex);
+                entry.setThumbnailTextureId(thumbId);
+            }
+            LOGGER.info("Lazily loaded and registered full texture for totem: {}", entry.getFileName());
+        } catch (Exception e) {
+            LOGGER.error("Failed to lazily load texture for entry: {}", entry.getFileName(), e);
         }
     }
 
@@ -1050,6 +1102,7 @@ public class TotemManager {
             entry.setEnabled(true);
             this.currentActiveTotem = entry;
             this.poppingTotem = entry;
+            ensureTextureRegistered(entry);
             updateActiveCache();
             saveConfig();
         }
@@ -1067,6 +1120,7 @@ public class TotemManager {
                 if (!entry.isEnabled()) {
                     this.currentActiveTotem = active.get(0);
                     this.poppingTotem = this.currentActiveTotem;
+                    ensureTextureRegistered(this.currentActiveTotem);
                 }
             }
         }
@@ -1077,6 +1131,9 @@ public class TotemManager {
         if (hasCustomTotem()) {
             this.poppingTotem = this.currentActiveTotem;
             advanceNextTotem();
+            if (this.currentActiveTotem != null) {
+                ensureTextureRegistered(this.currentActiveTotem);
+            }
         }
     }
 
@@ -1105,6 +1162,9 @@ public class TotemManager {
                 }
                 this.currentActiveTotem = candidates.get(random.nextInt(candidates.size()));
             }
+        }
+        if (this.currentActiveTotem != null) {
+            ensureTextureRegistered(this.currentActiveTotem);
         }
         updateActiveCache();
         saveConfig();
@@ -1290,6 +1350,9 @@ public class TotemManager {
     }
 
     public void loadInventoryGuiTexture() {
+        if (inventoryGuiSettings == null || !inventoryGuiSettings.isEnabled()) {
+            return;
+        }
         String fileName = inventoryGuiSettings.getImageFileName();
         if (fileName == null || fileName.trim().isEmpty()) {
             this.inventoryGuiImageWidth = 0;
@@ -1312,7 +1375,8 @@ public class TotemManager {
             NativeImage image = NativeImage.read(in);
             int origW = image.getWidth();
             int origH = image.getHeight();
-            int maxSafeDim = getMaxSafeTextureSize();
+            // Cap at 2048 for GUI background textures to prevent memory spikes on Intel iGPUs
+            int maxSafeDim = Math.min(2048, getMaxSafeTextureSize());
             if (origW > maxSafeDim || origH > maxSafeDim) {
                 LOGGER.warn("Inventory GUI image {} exceeds max safe size ({}x{}), downscaling...", fileName, origW, origH);
                 int targetW = maxSafeDim;
