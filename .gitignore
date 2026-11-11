@@ -10,4 +10,7 @@ tools/sdk_libs/
 tools/totem_converter/target/
 web/node_modules/
 web/dist/
+*.log
+issues/
+sample_totems/
 

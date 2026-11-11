@@ -1,0 +1,4 @@
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-L", "native=D:\\Documents\\Tool\\CustomTotemMod\\tools\\sdk_libs"
+]

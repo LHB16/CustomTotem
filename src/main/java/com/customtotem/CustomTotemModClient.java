@@ -3,6 +3,7 @@ package com.customtotem;
 import com.customtotem.gui.TotemManagerScreen;
 import com.customtotem.manager.TotemManager;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.option.KeyBinding;
@@ -15,8 +16,10 @@ public class CustomTotemModClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // Initialize Manager, load images and config
-        TotemManager.getInstance().init();
+        // Defer manager and texture loading to CLIENT_STARTED after RenderSystem & graphics device are initialized
+        ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
+            TotemManager.getInstance().init();
+        });
 
         // Register KeyBinding (Default: Key K)
         openGuiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(

@@ -7,7 +7,8 @@
     "ItemModelManagerMixin",
     "InGameOverlayRendererMixin",
     "ItemRenderStateAccessor",
-    "InventoryScreenMixin"
+    "InventoryScreenMixin",
+    "HeldItemRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

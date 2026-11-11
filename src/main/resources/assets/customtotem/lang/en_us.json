@@ -9,6 +9,8 @@
   "gui.customtotem.mode.sequential": "SEQUENTIAL",
   "gui.customtotem.mode.random": "RANDOM",
   "gui.customtotem.display_settings": "Display Settings",
+  "gui.customtotem.hand_outline": "Hand & Item Outline",
+  "gui.customtotem.hand_outline_settings": "Hand & Item Outline Settings",
   "gui.customtotem.preset": "Preset: ",
   "gui.customtotem.set_current": "Set Current",
   "gui.customtotem.current": "Selected",

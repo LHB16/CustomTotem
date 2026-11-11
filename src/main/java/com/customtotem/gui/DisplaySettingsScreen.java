@@ -178,6 +178,16 @@ public class DisplaySettingsScreen extends Screen {
         // Section: Features
         this.settingsList.addHeader(Text.literal("§a--- Cài Đặt Giao Diện Khác ---"), 0xFF55FF55);
 
+        // Hand Outline Settings button
+        this.settingsList.addWidget(ButtonWidget.builder(
+                Text.literal("✨ Cài Đặt Viền Sáng Vật Phẩm (Outline)"),
+                btn -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new HandOutlineSettingsScreen(this));
+                    }
+                }
+        ).dimensions(0, 0, 240, 20).build());
+
         // Inventory GUI Settings button
         this.settingsList.addWidget(ButtonWidget.builder(
                 Text.literal("🎒 Cài Đặt Ảnh Nền Túi Đồ"),

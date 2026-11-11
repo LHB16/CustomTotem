@@ -2,6 +2,7 @@ package com.customtotem.gui;
 
 import com.customtotem.manager.TotemManager;
 import com.customtotem.model.TotemEntry;
+import com.customtotem.model.TotemTextureTransform;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.Click;
@@ -12,6 +13,7 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.gui.widget.ElementListWidget;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -140,8 +142,13 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             int y = getY();
             int width = getWidth();
             int height = getHeight();
-            TextRenderer textRenderer = MinecraftClient.getInstance().textRenderer;
 
+            // Viewport Culling: Skip rendering if item is completely outside visible scroll viewport
+            if (y + height < TotemListWidget.this.getY() || y > TotemListWidget.this.getBottom()) {
+                return;
+            }
+
+            TextRenderer textRenderer = MinecraftClient.getInstance().textRenderer;
             boolean isCurrent = TotemManager.getInstance().getCurrentActiveTotem() == entry;
 
             // Highlight background if selected or hovered
@@ -154,25 +161,39 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             // Thumbnail background box
             context.fill(x, y + 1, x + 26, y + 27, 0xFF1E1E1E);
 
-            // Draw Thumbnail: (texture, x1, y1, x2, y2, u0, u1, v0, v1)
-            if (entry.getTextureId() != null) {
-                if (!entry.isTextureRegistered()) {
-                    TotemManager.getInstance().ensureTextureRegistered(entry);
-                }
-                if (entry.isTextureRegistered()) {
+            // Draw Thumbnail: Use dedicated lightweight thumbnail by default; animate if current active totem
+            Identifier drawTex = (isCurrent && entry.isTextureRegistered() && entry.getTextureId() != null)
+                    ? entry.getTextureId()
+                    : entry.getThumbnailTextureId();
+
+            if (drawTex != null) {
+                float u0, u1, v0, v1;
+                if (drawTex == entry.getTextureId()) {
                     long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
                     float[] uvs = entry.getRenderUVs(nowMs);
-                    float[] bounds = entry.getQuadBounds();
-                    float boxSize = 24.0f;
-                    int qx1 = (int) (x + 2 + bounds[0] * boxSize);
-                    int qx2 = (int) (x + 2 + bounds[1] * boxSize);
-                    int qy1 = (int) (y + 2 + (1.0f - bounds[3]) * boxSize);
-                    int qy2 = (int) (y + 2 + (1.0f - bounds[2]) * boxSize);
-
-                    context.enableScissor(x + 2, y + 2, x + 26, y + 26);
-                    context.drawTexturedQuad(entry.getTextureId(), qx1, qy1, qx2, qy2, uvs[0], uvs[1], uvs[2], uvs[3]);
-                    context.disableScissor();
+                    u0 = uvs[0];
+                    u1 = uvs[1];
+                    v0 = uvs[2];
+                    v1 = uvs[3];
+                } else {
+                    // Frame 0 thumbnail texture (128x128 max)
+                    TotemTextureTransform t = entry.getTransform();
+                    u0 = t.isFlipX() ? 1.0f : 0.0f;
+                    u1 = t.isFlipX() ? 0.0f : 1.0f;
+                    v0 = t.isFlipY() ? 1.0f : 0.0f;
+                    v1 = t.isFlipY() ? 0.0f : 1.0f;
                 }
+
+                float[] bounds = entry.getQuadBounds();
+                float boxSize = 24.0f;
+                int qx1 = (int) (x + 2 + bounds[0] * boxSize);
+                int qx2 = (int) (x + 2 + bounds[1] * boxSize);
+                int qy1 = (int) (y + 2 + (1.0f - bounds[3]) * boxSize);
+                int qy2 = (int) (y + 2 + (1.0f - bounds[2]) * boxSize);
+
+                context.enableScissor(x + 2, y + 2, x + 26, y + 26);
+                context.drawTexturedQuad(drawTex, qx1, qy1, qx2, qy2, u0, u1, v0, v1);
+                context.disableScissor();
             }
 
             // Text info
@@ -190,7 +211,7 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             String info = entry.getWidth() + "x" + entry.getHeight();
             if (entry.getTransform().isAnimated() && entry.getFrameCount() > 1) {
-                info += " (" + entry.getFrameCount() + "f)";
+                info += " (" + entry.getFrameCount() + "f, " + entry.getFps() + "fps)";
             }
             info += " " + entry.getVramBadge();
             if (entry.getTransform().getResolution() > 0) {

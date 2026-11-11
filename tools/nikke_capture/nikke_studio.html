@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nikke Live2D 60FPS Studio & Exporter (BD2-L2D-Viewer Style)</title>
+  <style>
+    :root {
+      --bg-950: #020617;
+      --bg-900: #0f172a;
+      --bg-850: #131c31;
+      --bg-800: #1e293b;
+      --border: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --amber: #fbbf24;
+      --amber-hover: #fcd34d;
+      --sky: #38bdf8;
+      --emerald: #34d399;
+      --rose: #fb7185;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-950);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    header {
+      height: 54px;
+      background: rgba(15, 23, 42, 0.9);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-badge {
+      background: rgba(251, 191, 36, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 300px 1fr 360px;
+      min-height: 0;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.6);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel-left { border-right: 1px solid var(--border); }
+    .panel-right { border-left: 1px solid var(--border); }
+    .panel-section { padding: 12px; border-bottom: 1px solid var(--border); }
+    .input, select {
+      width: 100%;
+      background: var(--bg-950);
+      border: 1px solid var(--bg-800);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      outline: none;
+    }
+    .input:focus, select:focus { border-color: var(--amber); }
+    .pills { display: flex; gap: 4px; overflow-x: auto; padding-top: 8px; }
+    .pill {
+      background: var(--bg-950);
+      border: 1px solid var(--bg-800);
+      color: var(--muted);
+      padding: 4px 9px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pill.active {
+      background: var(--amber);
+      color: #020617;
+      border-color: var(--amber);
+    }
+    .char-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .char-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(2, 6, 23, 0.5);
+      border: 1px solid transparent;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+    }
+    .char-item:hover { background: var(--bg-900); }
+    .char-item.active {
+      background: rgba(251, 191, 36, 0.14);
+      border-color: rgba(251, 191, 36, 0.45);
+    }
+    .char-name { font-size: 12px; font-weight: 700; }
+    .char-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .stage {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+    .stage-toolbar {
+      padding: 8px 14px;
+      background: rgba(15, 23, 42, 0.75);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+    }
+    .canvas-wrap:active { cursor: grabbing; }
+    .checker-bg {
+      background-image:
+        linear-gradient(45deg, #1e293b 25%, transparent 25%),
+        linear-gradient(-45deg, #1e293b 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #1e293b 75%),
+        linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+      background-color: #0f172a;
+    }
+    canvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border: 1px solid rgba(255,255,255,0.07);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    }
+    .timeline-bar {
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.9);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--bg-800);
+      background: var(--bg-900);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: 0.15s;
+    }
+    .btn:hover { background: var(--bg-800); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-amber {
+      background: linear-gradient(90deg, #fbbf24, #f59e0b);
+      color: #020617;
+      border: none;
+    }
+    .btn-amber:hover { filter: brightness(1.08); }
+    .btn-sky {
+      background: linear-gradient(90deg, #38bdf8, #06b6d4);
+      color: #020617;
+      border: none;
+    }
+    .btn-emerald {
+      background: linear-gradient(90deg, #34d399, #10b981);
+      color: #020617;
+      border: none;
+    }
+    .card {
+      background: rgba(2, 6, 23, 0.65);
+      border: 1px solid var(--bg-800);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .card-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .card-desc { font-size: 11px; color: var(--muted); line-height: 1.45; margin-bottom: 10px; }
+    .label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 20;
+      padding: 20px;
+      text-align: center;
+    }
+    .overlay.show { display: flex; }
+    .progress-box {
+      width: 320px;
+      height: 10px;
+      background: var(--bg-950);
+      border: 1px solid var(--bg-800);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #fbbf24, #f97316);
+      transition: width 0.1s;
+    }
+    .status-toast {
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      margin-top: 8px;
+      display: none;
+    }
+    .status-toast.show { display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <strong style="font-size:16px;">Nikke Live2D 60FPS Studio & Exporter</strong>
+      <span class="brand-badge">WebM Alpha + 60FPS PNG ZIP + Totem PNG</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);">
+      Kéo chuột: Di chuyển (Pan) • Cuộn chuột: Phóng to (Zoom)
+    </div>
+  </header>
+
+  <div class="workspace">
+    <!-- LEFT SIDEBAR -->
+    <aside class="panel panel-left">
+      <div class="panel-section">
+        <input id="searchInput" class="input" type="text" placeholder="Tìm Nikke (vd: Dorothy, Red Hood, 2B, c220)..." />
+        <div class="pills" id="mfgPills"></div>
+      </div>
+      <div class="char-list" id="charList"></div>
+      <div class="panel-section" style="background:var(--bg-950);">
+        <label class="label">Trang phục (Costume / Skin):</label>
+        <select id="skinSelect" style="margin-bottom:8px;"></select>
+        <label class="label">Tư thế (Pose Mode):</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;" id="poseButtons">
+          <button class="pill active" data-pose="fb">Standing</button>
+          <button class="pill" data-pose="aim">Aim</button>
+          <button class="pill" data-pose="cover">Cover</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER STAGE -->
+    <main class="stage">
+      <div class="stage-toolbar">
+        <strong id="modelTitle">Đang tải...</strong>
+        <div style="display:flex;gap:6px;">
+          <button class="btn" id="btnZoomFace" style="padding:4px 9px;font-size:11px;color:var(--amber);">Zoom Cận Mặt</button>
+          <button class="btn" id="btnResetCam" style="padding:4px 9px;font-size:11px;">Reset Camera</button>
+          <button class="btn" id="btnSnapshot" style="padding:4px 9px;font-size:11px;">Chụp PNG</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrap checker-bg" id="canvasWrap">
+        <canvas id="glCanvas" width="1080" height="1080"></canvas>
+        <div class="overlay" id="loadingOverlay">
+          <strong id="overlayTitle" style="font-size:15px;">Đang tải Model Spine 2D...</strong>
+          <span id="overlaySub" style="font-size:12px;color:var(--muted);">Đang kết nối CDN Nikke-DB</span>
+          <div class="progress-box"><div class="progress-bar" id="progressBar"></div></div>
+        </div>
+      </div>
+
+      <div class="timeline-bar">
+        <button class="btn btn-amber" id="btnPlayPause" style="width:85px;">Tạm dừng</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:12px;color:var(--muted);">Animation:</span>
+          <select id="animSelect" style="width:190px;"></select>
+        </div>
+        <input id="timeScrub" type="range" min="0" max="2" step="0.01" value="0" style="flex:1;accent-color:var(--amber);" />
+        <span id="timeLabel" style="font-size:12px;font-family:monospace;width:105px;text-align:right;">0.00s / 0.00s</span>
+      </div>
+    </main>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside class="panel panel-right" style="overflow-y:auto;padding:12px;">
+      <div class="card">
+        <div class="card-title" style="color:var(--amber);">Cấu Hình Kết Xuất (60 FPS)</div>
+        <div style="margin-top:8px;">
+          <label class="label">Độ phân giải (Resolution):</label>
+          <select id="resSelect" style="margin-bottom:8px;">
+            <option value="1080x1080">1080×1080 (Full HD Vuông)</option>
+            <option value="1080x1920">1080×1920 (Dọc 9:16)</option>
+            <option value="720x720">720×720 (HD Vuông)</option>
+            <option value="512x512">512×512 (Totem Ultra HD)</option>
+            <option value="256x256">256×256 (Totem HD)</option>
+          </select>
+          <label class="label">Tốc độ khung hình xuất (Target FPS):</label>
+          <select id="fpsSelect">
+            <option value="60" selected>60 FPS (Mượt chuẩn gốc)</option>
+            <option value="30">30 FPS</option>
+            <option value="20">20 FPS</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 1. EXPORT 60FPS PNG ZIP -->
+      <div class="card" style="border-color:rgba(251,191,36,0.4);">
+        <div class="card-title">1. Xuất Chuỗi Frame 60FPS (.ZIP chứa PNG)</div>
+        <div class="card-desc">
+          Trích xuất chính xác từng frame 60FPS (<code>frame_0000.png</code>...) không nền (Alpha trong suốt) đóng gói thành file <strong>.ZIP</strong>. Có thể kéo thả thẳng file ZIP này vào <code>TotemConverter.exe</code>!
+        </div>
+        <button class="btn btn-amber" id="btnExportZip" style="width:100%;">
+          Xuất File .ZIP (Chuỗi PNG 60FPS Không Nền)
+        </button>
+      </div>
+
+      <!-- 2. EXPORT TRANSPARENT VIDEO WEBM -->
+      <div class="card" style="border-color:rgba(56,189,248,0.4);">
+        <div class="card-title">2. Xuất Video Không Nền (.WebM Alpha 60FPS)</div>
+        <div class="card-desc">
+          Kết xuất video <code>.webm</code> (VP9/VP8 Alpha) giữ nguyên nền trong suốt ở tốc độ 60 FPS.
+        </div>
+        <button class="btn btn-sky" id="btnExportWebm" style="width:100%;">
+          Xuất Video Không Nền (.WebM 60FPS)
+        </button>
+      </div>
+
+      <!-- 3. EXPORT DIRECT MINECRAFT TOTEM -->
+      <div class="card" style="border-color:rgba(52,211,153,0.4);">
+        <div class="card-title">3. Xuất Thẳng Dải Totem Minecraft (.PNG)</div>
+        <div class="card-desc">
+          Ghép toàn bộ các frame thành 1 file ảnh Grid Atlas / Vertical Spritesheet PNG duy nhất chuẩn <code>CustomTotemMod</code>.
+        </div>
+        <button class="btn btn-emerald" id="btnExportTotem" style="width:100%;">
+          Tải Ngay Totem Spritesheet (.PNG)
+        </button>
+      </div>
+
+      <!-- 4. LOCAL FILE UPLOAD -->
+      <div class="card">
+        <div class="card-title">4. Nạp File Spine Từ Máy Tính / Mã ID</div>
+        <div class="card-desc">Chọn cùng lúc bộ 3 file <code>.skel</code> + <code>.atlas</code> + <code>.png</code> từ máy tính của bạn:</div>
+        <input id="localFilesInput" type="file" multiple accept=".skel,.json,.atlas,.png,.webp" class="input" style="margin-bottom:8px;" />
+        <div style="display:flex;gap:6px;">
+          <input id="customIdInput" class="input" placeholder="Nhập ID bất kỳ (vd: c510 hoặc c220_01)..." />
+          <button class="btn" id="btnLoadCustomId">Tải</button>
+        </div>
+      </div>
+
+      <!-- 5. LAYER / SLOT INSPECTOR (BD2-L2D-Viewer Style) -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div class="card-title" style="margin-bottom:0;">5. Quản Lý Lớp / Layer (<span id="slotCountLabel">0</span>)</div>
+          <button class="btn" id="btnShowAllSlots" style="padding:3px 8px;font-size:10px;">Hiện tất cả</button>
+        </div>
+        <div class="card-desc">Bật/tắt từng bộ phận (vũ khí, hiệu ứng, lớp áo, nền...) trước khi xuất ZIP/WebM:</div>
+        <input id="slotSearchInput" class="input" placeholder="Lọc tên layer / slot..." style="margin-bottom:6px;" />
+        <div id="slotListBox" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;"></div>
+      </div>
+
+      <div id="statusToast" class="status-toast"></div>
+    </aside>
+  </div>
+
+  <script>
+    const PRIMARY_NKAS_CDN = 'https://nkas-l2d.pages.dev/characters';
+    const NKAS_CHARS_JSON = 'https://nkas-l2d.pages.dev/characters.json';
+    const LEGACY_GITHUB_CDN = 'https://raw.githubusercontent.com/Nikke-db/Nikke-db.github.io/main/l2d';
+
+    let CHARACTERS = [
+      { id: 'c220', name: 'Dorothy', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default (Eden Wing)' }, { code: '01', name: 'Nostalgia' }] },
+      { id: 'c907', name: 'Red Hood', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Nonsense Red' }] },
+      { id: 'c232', name: 'Modernia', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'First Affection' }, { code: '02', name: 'Second Affection' }] },
+      { id: 'c070', name: 'Scarlet', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c073', name: 'Scarlet: Black Shadow', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Longing Flower' }] },
+      { id: 'c410', name: 'Crown', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Naked King' }] },
+      { id: 'c510', name: 'Cinderella', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Glass Princess' }] },
+      { id: 'c071', name: 'Snow White', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c072', name: 'Rapunzel', mfg: 'Pilgrim', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c010', name: 'Rapi', mfg: 'Elysion', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'White Promise' }, { code: '02', name: 'Classic Vacation' }] },
+      { id: 'c011', name: 'Neon', mfg: 'Elysion', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c110', name: 'Helm', mfg: 'Elysion', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Chandelier' }] },
+      { id: 'c160', name: 'Privaty', mfg: 'Elysion', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Government Grunt' }, { code: '02', name: 'Banquet Princess' }] },
+      { id: 'c322', name: 'D: Killer Wife', mfg: 'Elysion', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c200', name: 'Marciana', mfg: 'Elysion', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'School Days' }] },
+      { id: 'c100', name: 'Laplace', mfg: 'Missilis', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c101', name: 'Drake', mfg: 'Missilis', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Villain Racer' }] },
+      { id: 'c102', name: 'Maxwell', mfg: 'Missilis', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c190', name: 'Liter', mfg: 'Missilis', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c280', name: 'Tia', mfg: 'Missilis', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c281', name: 'Naga', mfg: 'Missilis', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Last Girlhood' }] },
+      { id: 'c390', name: 'Elegg', mfg: 'Missilis', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c012', name: 'Anis', mfg: 'Tetra', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c017', name: 'Anis: Sparkling Summer', mfg: 'Tetra', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c040', name: 'Alice', mfg: 'Tetra', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Sweet Home' }] },
+      { id: 'c350', name: 'Blanc', mfg: 'Tetra', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c351', name: 'Noir', mfg: 'Tetra', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c290', name: 'Viper', mfg: 'Tetra', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Toxic Rabbit' }] },
+      { id: 'c180', name: 'Rupee', mfg: 'Tetra', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Rabbit Deluxe' }] },
+      { id: 'c810', name: '2B', mfg: 'Abnormal', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Metamorphic Damage' }] },
+      { id: 'c811', name: 'A2', mfg: 'Abnormal', skins: [{ code: '00', name: 'Default' }] },
+      { id: 'c800', name: 'Makima', mfg: 'Abnormal', skins: [{ code: '00', name: 'Default' }, { code: '01', name: 'Coat Off' }] },
+      { id: 'c801', name: 'Power', mfg: 'Abnormal', skins: [{ code: '00', name: 'Default' }] },
+    ];
+
+    function getNikkeUrlCandidates(charId, skinCode, pose) {
+      const raw = String(charId || 'c220').trim().toLowerCase();
+      let baseCharId = raw;
+      let resolvedSkin = String(skinCode || '00').padStart(2, '0');
+      if (raw.includes('_')) {
+        const parts = raw.split('_');
+        baseCharId = parts[0];
+        if (!skinCode || skinCode === '00') resolvedSkin = parts[1] || '00';
+      }
+      const fullId = `${baseCharId}_${resolvedSkin}`;
+      const poseFolder = (pose === 'aim') ? 'aim' : (pose === 'cover') ? 'cover' : 'idle';
+      const nkasBase = `${PRIMARY_NKAS_CDN}/${fullId}/${poseFolder}`;
+      const list = [
+        { base: nkasBase, stem: fullId },
+      ];
+      if (poseFolder === 'aim' || poseFolder === 'cover') {
+        list.push({ base: nkasBase, stem: `${baseCharId}_${poseFolder}_${resolvedSkin}` });
+        list.push({ base: nkasBase, stem: `${fullId}_${poseFolder}` });
+      }
+      if (resolvedSkin !== '00') {
+        const defId = `${baseCharId}_00`;
+        list.push({ base: `${PRIMARY_NKAS_CDN}/${defId}/${poseFolder}`, stem: defId });
+      }
+      if (poseFolder === 'idle') {
+        list.push({ base: `${LEGACY_GITHUB_CDN}/${fullId}`, stem: fullId });
+      } else {
+        list.push({ base: `${LEGACY_GITHUB_CDN}/${fullId}/${poseFolder}`, stem: `${baseCharId}_${poseFolder}_${resolvedSkin}` });
+      }
+      return list;
+    }
+
+    async function syncLiveNkasCatalog() {
+      try {
+        const res = await fetch(NKAS_CHARS_JSON);
+        if (!res.ok) return;
+        const data = await res.json();
+        const catMap = new Map();
+        const skinDiscovered = new Map();
+        // Dùng hoàn toàn dữ liệu live (danh sách gõ cứng có ID sai nên không trộn vào)
+
+        const addEntry = (rawId, rawLabel) => {
+          if (!rawId || typeof rawId !== 'string') return;
+          const m = rawId.trim().match(/^([a-zA-Z0-9]+?)(?:_([0-9a-zA-Z]+))?$/);
+          if (!m) return;
+          const baseId = m[1].toLowerCase();
+          const sk = m[2] || '00';
+          const lbl = (typeof rawLabel === 'string' && rawLabel.trim()) ? rawLabel.trim() : rawId;
+          if (!skinDiscovered.has(baseId)) skinDiscovered.set(baseId, new Map());
+          skinDiscovered.get(baseId).set(sk, lbl);
+          if (!catMap.has(baseId)) {
+            catMap.set(baseId, { id: baseId, name: lbl.split(' - ')[0], mfg: 'All', skins: [] });
+          }
+        };
+
+        if (Array.isArray(data)) {
+          data.forEach(it => {
+            if (typeof it === 'string') addEntry(it, it);
+            else if (Array.isArray(it)) addEntry(it[0], it[1] || it[0]);
+            else if (it && typeof it === 'object') addEntry(it.id || it.code || it.key, it.name || it.title || it.id);
+          });
+        } else if (data && typeof data === 'object') {
+          Object.entries(data).forEach(([k, v]) => {
+            if (typeof v === 'string') addEntry(k, v);
+            else if (v && typeof v === 'object') addEntry(v.id || k, v.name || v.title || k);
+            else addEntry(k, k);
+          });
+        }
+
+        for (const [baseId, smap] of skinDiscovered.entries()) {
+          const entry = catMap.get(baseId);
+          if (!entry || !smap.size) continue;
+          const oldMap = new Map((entry.skins || []).map(s => [s.code, s.name]));
+          const merged = [];
+          for (const [code, rLabel] of smap.entries()) {
+            const known = oldMap.get(code);
+            const dName = (rLabel && rLabel !== `${baseId}_${code}` && rLabel !== entry.name) ? rLabel : (known || (code === '00' ? 'Default' : `Costume ${code}`));
+            merged.push({ code, name: dName });
+          }
+          merged.sort((a, b) => a.code.localeCompare(b.code));
+          entry.skins = merged;
+        }
+
+        CHARACTERS = Array.from(catMap.values());
+        const updatedSel = CHARACTERS.find(c => c.id === selectedChar.id) || CHARACTERS.find(c => c.id === 'c470') || CHARACTERS[0];
+        if (updatedSel) selectedChar = updatedSel;
+        renderCharList();
+        renderSkins();
+      } catch (e) {
+        console.warn('NKAS catalog sync skipped:', e);
+      }
+    }
+
+    // CRC32 & Store-mode ZIP Builder
+    const CRC_TABLE = (() => {
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        t[i] = c >>> 0;
+      }
+      return t;
+    })();
+    function crc32(bytes) {
+      let crc = 0xffffffff;
+      for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+    function createZipBlob(files) {
+      const enc = new TextEncoder();
+      let localSize = 0, cdSize = 0;
+      const entries = files.map(f => {
+        const nameBytes = enc.encode(f.name);
+        const data = f.data;
+        const entry = { nameBytes, data, crc: crc32(data), size: data.byteLength, offset: localSize };
+        localSize += 30 + nameBytes.length + entry.size;
+        cdSize += 46 + nameBytes.length;
+        return entry;
+      });
+      const out = new Uint8Array(localSize + cdSize + 22);
+      const view = new DataView(out.buffer);
+      let ptr = 0;
+      for (const e of entries) {
+        view.setUint32(ptr, 0x04034b50, true);
+        view.setUint16(ptr + 4, 20, true);
+        view.setUint16(ptr + 6, 0x0800, true);
+        view.setUint16(ptr + 8, 0, true);
+        view.setUint32(ptr + 14, e.crc, true);
+        view.setUint32(ptr + 18, e.size, true);
+        view.setUint32(ptr + 22, e.size, true);
+        view.setUint16(ptr + 26, e.nameBytes.length, true);
+        ptr += 30;
+        out.set(e.nameBytes, ptr); ptr += e.nameBytes.length;
+        out.set(e.data, ptr); ptr += e.size;
+      }
+      const cdOffset = ptr;
+      for (const e of entries) {
+        view.setUint32(ptr, 0x02014b50, true);
+        view.setUint16(ptr + 4, 20, true);
+        view.setUint16(ptr + 6, 20, true);
+        view.setUint16(ptr + 8, 0x0800, true);
+        view.setUint32(ptr + 16, e.crc, true);
+        view.setUint32(ptr + 20, e.size, true);
+        view.setUint32(ptr + 24, e.size, true);
+        view.setUint16(ptr + 28, e.nameBytes.length, true);
+        view.setUint32(ptr + 42, e.offset, true);
+        ptr += 46;
+        out.set(e.nameBytes, ptr); ptr += e.nameBytes.length;
+      }
+      view.setUint32(ptr, 0x06054b50, true);
+      view.setUint16(ptr + 8, entries.length, true);
+      view.setUint16(ptr + 10, entries.length, true);
+      view.setUint32(ptr + 12, cdSize, true);
+      view.setUint32(ptr + 16, cdOffset, true);
+      return new Blob([out], { type: 'application/zip' });
+    }
+
+    // State
+    let selectedChar = CHARACTERS[0];
+    let selectedSkin = '00';
+    let selectedPose = 'fb';
+    let filterMfg = 'all';
+    let searchTerm = '';
+    let isPlaying = true;
+    let isExporting = false;
+    let currentAnim = 'idle';
+    let animDuration = 2.0;
+
+    const canvas = document.getElementById('glCanvas');
+    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true })
+            || canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true });
+
+    let spineCache = {};
+    let hiddenSlots = new Set();
+    let slotFilterTerm = '';
+    let ctx = { spine: null, shader: null, batcher: null, mvp: null, renderer: null, skeleton: null, state: null, bounds: null, textures: [], baseCamX: 0, baseCamY: 0, baseCamScale: 1, panX: 0, panY: 0, zoom: 1 };
+
+    function detectSkelVer(skelBuf) {
+      if (!skelBuf) return '4.0';
+      const b = skelBuf instanceof Uint8Array ? skelBuf : new Uint8Array(skelBuf);
+      let s = '';
+      for (let i = 0; i < Math.min(b.length, 64); i++) {
+        if (b[i] >= 32 && b[i] <= 126) s += String.fromCharCode(b[i]);
+      }
+      if (s.includes('4.1.')) return '4.1';
+      if (s.includes('4.0.')) return '4.0';
+      return '4.0';
+    }
+
+    async function getSpineRuntime(ver) {
+      if (spineCache[ver]) return spineCache[ver];
+      const v = ver === '4.0' ? '4.0.31' : '4.1.24';
+      const path = `@esotericsoftware/spine-webgl@${v}/dist/iife/spine-webgl.min.js`;
+      const urls = [`https://cdn.jsdelivr.net/npm/${path}`, `https://unpkg.com/${path}`];
+      let code = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) { code = await res.text(); break; }
+        } catch (e) { /* thử URL tiếp theo */ }
+      }
+      if (!code) throw new Error('Không tải được Spine runtime ' + v + ' từ CDN');
+      const rt = (new Function(code + '; return spine;'))();
+      if (rt.webgl) Object.assign(rt, rt.webgl);
+      spineCache[ver] = rt;
+      return rt;
+    }
+
+    function loadImg(url) {
+      return new Promise((res, rej) => {
+        const i = new Image();
+        i.crossOrigin = 'anonymous';
+        i.onload = () => res(i);
+        i.onerror = () => rej(new Error('Không thể tải ảnh: ' + url));
+        i.src = url;
+      });
+    }
+
+    function renderFrame() {
+      if (!ctx.skeleton || !ctx.state || !ctx.spine) return;
+      if (ctx.skeleton.slots) {
+        for (let i = 0; i < ctx.skeleton.slots.length; i++) {
+          const sl = ctx.skeleton.slots[i];
+          if (hiddenSlots.has(sl.data.name)) sl.color.a = 0;
+        }
+      }
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      const cx = ctx.baseCamX - ctx.panX;
+      const cy = ctx.baseCamY + ctx.panY;
+      const vw = (canvas.width * ctx.baseCamScale) / ctx.zoom;
+      const vh = (canvas.height * ctx.baseCamScale) / ctx.zoom;
+      ctx.mvp.ortho2d(cx - vw / 2, cy - vh / 2, vw, vh);
+      ctx.shader.bind();
+      ctx.shader.setUniformi(ctx.spine.Shader.SAMPLER, 0);
+      ctx.shader.setUniform4x4f(ctx.spine.Shader.MVP_MATRIX, ctx.mvp.values);
+      ctx.batcher.begin(ctx.shader);
+      ctx.renderer.premultipliedAlpha = true;
+      ctx.renderer.draw(ctx.batcher, ctx.skeleton);
+      ctx.batcher.end();
+      ctx.shader.unbind();
+    }
+
+    let lastTime = performance.now();
+    function loop(now) {
+      requestAnimationFrame(loop);
+      if (isExporting) { lastTime = now; return; }
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+      if (ctx.skeleton && ctx.state && isPlaying) {
+        ctx.state.update(dt);
+        ctx.state.apply(ctx.skeleton);
+        ctx.skeleton.updateWorldTransform();
+        const tr = ctx.state.getCurrent(0);
+        if (tr && tr.animation) {
+          const t = tr.trackTime % Math.max(0.01, tr.animation.duration);
+          document.getElementById('timeScrub').value = t;
+          document.getElementById('timeLabel').textContent = `${t.toFixed(2)}s / ${animDuration.toFixed(2)}s`;
+        }
+      }
+      renderFrame();
+    }
+    requestAnimationFrame(loop);
+
+    function renderSlotInspector() {
+      const box = document.getElementById('slotListBox');
+      const countEl = document.getElementById('slotCountLabel');
+      if (!ctx.skeleton || !ctx.skeleton.slots) {
+        box.innerHTML = '';
+        countEl.textContent = '0';
+        return;
+      }
+      const allSlots = ctx.skeleton.slots.map(s => s.data.name);
+      countEl.textContent = String(allSlots.length);
+      const filtered = allSlots.filter(n => !slotFilterTerm || n.toLowerCase().includes(slotFilterTerm));
+      box.innerHTML = filtered.map(name => {
+        const isHidden = hiddenSlots.has(name);
+        return `
+          <button class="char-item" data-slot="${name}" style="padding:5px 8px;border-radius:7px;opacity:${isHidden ? '0.45' : '1'};">
+            <span style="font-size:11px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
+            <span style="font-size:10px;color:${isHidden ? 'var(--rose)' : 'var(--emerald)'};">${isHidden ? 'Đã ẩn' : 'Hiện'}</span>
+          </button>
+        `;
+      }).join('');
+      box.querySelectorAll('[data-slot]').forEach(btn => {
+        btn.onclick = () => {
+          const sname = btn.dataset.slot;
+          const sl = ctx.skeleton.findSlot(sname);
+          if (hiddenSlots.has(sname)) {
+            hiddenSlots.delete(sname);
+            if (sl) sl.color.a = 1;
+          } else {
+            hiddenSlots.add(sname);
+            if (sl) sl.color.a = 0;
+          }
+          renderSlotInspector();
+          renderFrame();
+        };
+      });
+    }
+
+    async function mountScene(skelBuf, jsonText, atlasText, imgMap, title) {
+      ctx.textures.forEach(t => t?.dispose?.());
+      const prefVer = skelBuf ? detectSkelVer(skelBuf) : '4.1';
+      const altVer = prefVer === '4.0' ? '4.1' : '4.0';
+      let rt = await getSpineRuntime(prefVer);
+      let skelData, texs = [];
+      const tryBuild = (s) => {
+        texs = [];
+        // Spine 4.x: TextureAtlas không nhận callback, phải gán texture cho từng page
+        const atlas = new s.TextureAtlas(atlasText);
+        for (const page of atlas.pages) {
+          const p = page.name;
+          const name = p.split('/').pop();
+          const im = imgMap[p] || imgMap[name] || Object.values(imgMap)[0];
+          const gt = new s.GLTexture(gl, im, false);
+          gt.setFilters(s.TextureFilter.Linear, s.TextureFilter.Linear);
+          gt.setWraps(s.TextureWrap.ClampToEdge, s.TextureWrap.ClampToEdge);
+          texs.push(gt);
+          page.setTexture(gt);
+        }
+        const loader = new s.AtlasAttachmentLoader(atlas);
+        if (jsonText) return new s.SkeletonJson(loader).readSkeletonData(jsonText);
+        return new s.SkeletonBinary(loader).readSkeletonData(new Uint8Array(skelBuf));
+      };
+      try { skelData = tryBuild(rt); } catch (e) {
+        texs.forEach(t => t?.dispose?.());
+        rt = await getSpineRuntime(altVer);
+        skelData = tryBuild(rt);
+      }
+      const skeleton = new rt.Skeleton(skelData);
+      if (skelData.skins?.length) {
+        skeleton.setSkin(skelData.findSkin('default') || skelData.skins[skelData.skins.length - 1]);
+        skeleton.setSlotsToSetupPose();
+      }
+      const state = new rt.AnimationState(new rt.AnimationStateData(skelData));
+      const anims = skelData.animations || [];
+      const defAnim = anims.find(a => a.name === 'idle') || anims.find(a => a.name.toLowerCase().includes('idle')) || anims[0];
+      currentAnim = defAnim ? defAnim.name : '';
+      animDuration = defAnim ? defAnim.duration : 2.0;
+      if (currentAnim) {
+        state.setAnimation(0, currentAnim, true);
+        state.apply(skeleton);
+        skeleton.updateWorldTransform();
+      }
+      const off = new rt.Vector2(), sz = new rt.Vector2();
+      skeleton.getBounds(off, sz, []);
+      const b = (isFinite(off.x) && sz.x > 5) ? { x: off.x, y: off.y, w: sz.x, h: sz.y } : { x: -500, y: 0, w: 1000, h: 1800 };
+      hiddenSlots = new Set();
+      ctx = {
+        spine: rt,
+        shader: rt.Shader.newTwoColoredTextured(gl),
+        batcher: new rt.PolygonBatcher(gl, true, 10920),
+        mvp: new rt.Matrix4(),
+        renderer: new rt.SkeletonRenderer(gl),
+        skeleton, state, bounds: b, textures: texs,
+        baseCamX: b.x + b.w / 2,
+        baseCamY: b.y + b.h / 2,
+        baseCamScale: Math.max((b.w * 1.18) / canvas.width, (b.h * 1.18) / canvas.height, 0.1),
+        panX: 0, panY: 0, zoom: 1
+      };
+      document.getElementById('modelTitle').textContent = title;
+      const animSel = document.getElementById('animSelect');
+      animSel.innerHTML = anims.map(a => `<option value="${a.name}" ${a.name===currentAnim?'selected':''}>${a.name} (${a.duration.toFixed(2)}s)</option>`).join('');
+      document.getElementById('timeScrub').max = Math.max(0.01, animDuration);
+      renderSlotInspector();
+      renderFrame();
+    }
+
+    async function loadRemoteModel() {
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      document.getElementById('overlayTitle').textContent = `Đang tải ${selectedChar.name} (${selectedChar.id}_${selectedSkin})...`;
+      document.getElementById('overlaySub').textContent = 'Đang kết nối kho CDN nkas-l2d.pages.dev';
+      document.getElementById('progressBar').style.width = '35%';
+      try {
+        const candidates = getNikkeUrlCandidates(selectedChar.id, selectedSkin, selectedPose);
+        let chosen = null, atlasText = null;
+        for (const cand of candidates) {
+          try {
+            const res = await fetch(`${cand.base}/${cand.stem}.atlas`);
+            if (res.ok) {
+              const txt = await res.text();
+              if (txt && txt.includes('.png')) {
+                chosen = cand;
+                atlasText = txt;
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+        if (!chosen || !atlasText) {
+          throw new Error(`Không tìm thấy model (${selectedChar.id}_${selectedSkin} - ${selectedPose.toUpperCase()}) trên CDN. Hãy thử chọn Skin [00] Default.`);
+        }
+        document.getElementById('progressBar').style.width = '65%';
+        const pages = atlasText.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.includes(':') && /\.(png|webp)$/i.test(l));
+        if (!pages.length) pages.push(`${chosen.stem}.png`);
+        const [skelRes, ...imgs] = await Promise.all([
+          fetch(`${chosen.base}/${chosen.stem}.skel`),
+          ...pages.map(p => loadImg(`${chosen.base}/${p}`))
+        ]);
+        if (!skelRes.ok) throw new Error('Không thể tải file .skel từ CDN');
+        const skelBuf = await skelRes.arrayBuffer();
+        const map = {};
+        pages.forEach((p, i) => map[p] = imgs[i]);
+        const poseName = selectedPose === 'fb' ? 'STANDING' : selectedPose.toUpperCase();
+        await mountScene(skelBuf, null, atlasText, map, `${selectedChar.name} (${chosen.stem} • ${poseName})`);
+        showStatus(`Đã tải thành công ${selectedChar.name} (${chosen.stem} • ${poseName})`, false);
+      } catch (err) {
+        showStatus('Lỗi: ' + err.message, true);
+      } finally {
+        ov.classList.remove('show');
+      }
+    }
+
+    function showStatus(msg, isErr) {
+      const el = document.getElementById('statusToast');
+      el.textContent = msg;
+      el.style.background = isErr ? 'rgba(244,63,94,0.18)' : 'rgba(52,211,153,0.18)';
+      el.style.border = isErr ? '1px solid rgba(244,63,94,0.4)' : '1px solid rgba(52,211,153,0.4)';
+      el.style.color = isErr ? '#fda4af' : '#6ee7b7';
+      el.classList.add('show');
+    }
+
+    // UI Wiring
+    function renderCharList() {
+      const list = document.getElementById('charList');
+      const filtered = CHARACTERS.filter(c => (filterMfg === 'all' || c.mfg === filterMfg) && (!searchTerm || c.name.toLowerCase().includes(searchTerm) || c.id.includes(searchTerm)));
+      list.innerHTML = filtered.map(c => `
+        <button class="char-item ${c.id===selectedChar.id?'active':''}" data-id="${c.id}">
+          <div>
+            <div class="char-name">${c.name}</div>
+            <div class="char-meta">${c.mfg} • ${c.id}</div>
+          </div>
+          <span style="color:var(--amber);">›</span>
+        </button>
+      `).join('');
+      list.querySelectorAll('.char-item').forEach(btn => {
+        btn.onclick = () => {
+          selectedChar = CHARACTERS.find(x => x.id === btn.dataset.id);
+          selectedSkin = selectedChar.skins[0].code;
+          renderCharList();
+          renderSkins();
+          loadRemoteModel();
+        };
+      });
+    }
+
+    function renderSkins() {
+      const sel = document.getElementById('skinSelect');
+      sel.innerHTML = (selectedChar.skins || [{ code: '00', name: 'Default' }]).map(s => `<option value="${s.code}">[${s.code}] ${s.name}</option>`).join('');
+      sel.value = selectedSkin;
+    }
+
+    const mfgs = ['all'];
+    const mfgContainer = document.getElementById('mfgPills');
+    mfgContainer.innerHTML = mfgs.map(m => `<button class="pill ${m==='all'?'active':''}" data-m="${m}">${m==='all'?'Tất cả':m}</button>`).join('');
+    mfgContainer.querySelectorAll('.pill').forEach(b => {
+      b.onclick = () => {
+        filterMfg = b.dataset.m;
+        mfgContainer.querySelectorAll('.pill').forEach(x => x.classList.toggle('active', x.dataset.m === filterMfg));
+        renderCharList();
+      };
+    });
+
+    document.getElementById('searchInput').oninput = (e) => { searchTerm = e.target.value.toLowerCase(); renderCharList(); };
+    document.getElementById('skinSelect').onchange = (e) => { selectedSkin = e.target.value; loadRemoteModel(); };
+    document.querySelectorAll('#poseButtons .pill').forEach(b => {
+      b.onclick = () => {
+        selectedPose = b.dataset.pose;
+        document.querySelectorAll('#poseButtons .pill').forEach(x => x.classList.toggle('active', x.dataset.pose === selectedPose));
+        loadRemoteModel();
+      };
+    });
+
+    document.getElementById('animSelect').onchange = (e) => {
+      currentAnim = e.target.value;
+      if (ctx.state) {
+        ctx.state.setAnimation(0, currentAnim, true);
+        const found = ctx.skeleton.data.animations.find(a => a.name === currentAnim);
+        animDuration = found ? found.duration : 2.0;
+        document.getElementById('timeScrub').max = animDuration;
+      }
+    };
+
+    document.getElementById('btnPlayPause').onclick = (e) => {
+      isPlaying = !isPlaying;
+      e.target.textContent = isPlaying ? 'Tạm dừng' : 'Phát tiếp';
+    };
+
+    document.getElementById('timeScrub').oninput = (e) => {
+      isPlaying = false;
+      document.getElementById('btnPlayPause').textContent = 'Phát tiếp';
+      const tr = ctx.state?.getCurrent(0);
+      if (tr) {
+        tr.trackTime = parseFloat(e.target.value);
+        ctx.state.apply(ctx.skeleton);
+        ctx.skeleton.updateWorldTransform();
+        renderFrame();
+      }
+    };
+
+    // Pan & Zoom
+    let dragging = false, lx = 0, ly = 0;
+    const wrap = document.getElementById('canvasWrap');
+    wrap.onmousedown = (e) => { dragging = true; lx = e.clientX; ly = e.clientY; };
+    window.onmousemove = (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lx, dy = e.clientY - ly;
+      lx = e.clientX; ly = e.clientY;
+      const r = canvas.getBoundingClientRect();
+      const wf = ctx.baseCamScale / ctx.zoom;
+      ctx.panX += dx * (canvas.width / Math.max(1, r.width)) * wf;
+      ctx.panY += dy * (canvas.height / Math.max(1, r.height)) * wf;
+      renderFrame();
+    };
+    window.onmouseup = () => dragging = false;
+    wrap.onwheel = (e) => {
+      e.preventDefault();
+      ctx.zoom = Math.min(8, Math.max(0.2, ctx.zoom * (e.deltaY < 0 ? 1.12 : 0.89)));
+      renderFrame();
+    };
+
+    document.getElementById('btnResetCam').onclick = () => { ctx.panX = 0; ctx.panY = 0; ctx.zoom = 1; renderFrame(); };
+    document.getElementById('btnZoomFace').onclick = () => {
+      if (!ctx.bounds) return;
+      ctx.zoom = 2.2; ctx.panX = 0; ctx.panY = ctx.bounds.h * 0.24; renderFrame();
+    };
+    document.getElementById('btnSnapshot').onclick = () => {
+      renderFrame();
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `${selectedChar.name}_${currentAnim}.png`;
+      a.click();
+    };
+
+    document.getElementById('resSelect').onchange = (e) => {
+      const [w, h] = e.target.value.split('x').map(Number);
+      canvas.width = w; canvas.height = h;
+      if (ctx.bounds) ctx.baseCamScale = Math.max((ctx.bounds.w * 1.18) / w, (ctx.bounds.h * 1.18) / h, 0.1);
+      renderFrame();
+    };
+
+    // EXPORT 1: 60FPS PNG ZIP
+    document.getElementById('btnExportZip').onclick = async () => {
+      if (!ctx.skeleton || isExporting) return;
+      const fps = Number(document.getElementById('fpsSelect').value) || 60;
+      const total = Math.max(1, Math.round(animDuration * fps));
+      const dt = 1 / fps;
+      isExporting = true;
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      try {
+        ctx.skeleton.setToSetupPose();
+        ctx.state.setAnimation(0, currentAnim, false);
+        const files = [];
+        for (let i = 0; i < total; i++) {
+          ctx.state.update(i === 0 ? 0 : dt);
+          ctx.state.apply(ctx.skeleton);
+          ctx.skeleton.updateWorldTransform();
+          renderFrame();
+          const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          files.push({ name: `frame_${String(i).padStart(4, '0')}.png`, data: bytes });
+          if (i % 3 === 0 || i === total - 1) {
+            document.getElementById('overlayTitle').textContent = `Đang xuất Frame PNG: ${i + 1} / ${total} (${fps} FPS)`;
+            document.getElementById('progressBar').style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+        const zipBlob = createZipBlob(files);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = `${selectedChar.name.toLowerCase()}_${selectedPose}_${currentAnim}_${fps}fps_${total}f_frames.zip`;
+        a.click();
+        showStatus(`Đã xuất thành công ${total} frame PNG (${fps} FPS) vào file .ZIP!`, false);
+      } catch (e) {
+        showStatus('Lỗi xuất ZIP: ' + e.message, true);
+      } finally {
+        ctx.state.setAnimation(0, currentAnim, true);
+        ov.classList.remove('show');
+        isExporting = false;
+      }
+    };
+
+    // EXPORT 2: TRANSPARENT WEBM VIDEO
+    document.getElementById('btnExportWebm').onclick = async () => {
+      if (!ctx.skeleton || isExporting) return;
+      const fps = Number(document.getElementById('fpsSelect').value) || 60;
+      const total = Math.max(1, Math.round(animDuration * fps));
+      const dt = 1 / fps;
+      isExporting = true;
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      try {
+        const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+        const stream = canvas.captureStream(0);
+        const track = stream.getVideoTracks()[0];
+        const chunks = [];
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 16000000 });
+        rec.ondataavailable = e => { if (e.data?.size > 0) chunks.push(e.data); };
+        const stopP = new Promise(r => rec.onstop = r);
+        ctx.skeleton.setToSetupPose();
+        ctx.state.setAnimation(0, currentAnim, false);
+        rec.start();
+        for (let i = 0; i < total; i++) {
+          ctx.state.update(i === 0 ? 0 : dt);
+          ctx.state.apply(ctx.skeleton);
+          ctx.skeleton.updateWorldTransform();
+          renderFrame();
+          if (track?.requestFrame) track.requestFrame();
+          document.getElementById('overlayTitle').textContent = `Đang ghi Video WebM Alpha: ${i + 1} / ${total} (${fps} FPS)`;
+          document.getElementById('progressBar').style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+          await new Promise(r => setTimeout(r, 1000 / fps));
+        }
+        rec.stop();
+        await stopP;
+        const blob = new Blob(chunks, { type: mime });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${selectedChar.name.toLowerCase()}_${selectedPose}_${currentAnim}_${fps}fps_alpha.webm`;
+        a.click();
+        showStatus(`Đã xuất Video không nền (.webm @ ${fps} FPS) thành công!`, false);
+      } catch (e) {
+        showStatus('Lỗi xuất WebM: ' + e.message, true);
+      } finally {
+        ctx.state.setAnimation(0, currentAnim, true);
+        ov.classList.remove('show');
+        isExporting = false;
+      }
+    };
+
+    // EXPORT 3: MINECRAFT TOTEM SPRITESHEET
+    document.getElementById('btnExportTotem').onclick = async () => {
+      if (!ctx.skeleton || isExporting) return;
+      const fps = Number(document.getElementById('fpsSelect').value) || 60;
+      const dur = Math.min(4.0, Math.max(0.5, animDuration));
+      const total = Math.max(1, Math.round(dur * fps));
+      const dt = 1 / fps;
+      const size = 256;
+      const cols = (total * size > 8192) ? Math.ceil(Math.sqrt(total)) : 1;
+      const rows = Math.ceil(total / cols);
+      const sc = document.createElement('canvas');
+      sc.width = cols * size; sc.height = rows * size;
+      const sctx = sc.getContext('2d');
+      isExporting = true;
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      try {
+        ctx.skeleton.setToSetupPose();
+        ctx.state.setAnimation(0, currentAnim, false);
+        const minSide = Math.min(canvas.width, canvas.height);
+        const sx = (canvas.width - minSide) / 2, sy = (canvas.height - minSide) / 2;
+        for (let i = 0; i < total; i++) {
+          ctx.state.update(i === 0 ? 0 : dt);
+          ctx.state.apply(ctx.skeleton);
+          ctx.skeleton.updateWorldTransform();
+          renderFrame();
+          sctx.drawImage(canvas, sx, sy, minSide, minSide, (i % cols) * size, Math.floor(i / cols) * size, size, size);
+          if (i % 4 === 0 || i === total - 1) {
+            document.getElementById('overlayTitle').textContent = `Đang ghép Totem Spritesheet: ${i + 1} / ${total}`;
+            document.getElementById('progressBar').style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+        const a = document.createElement('a');
+        a.href = sc.toDataURL('image/png');
+        const gridTag = cols > 1 ? `_grid${cols}x${rows}_${total}f` : '';
+        a.download = `${selectedChar.name.toLowerCase()}_${currentAnim}${gridTag}_${fps}fps.png`;
+        a.click();
+        showStatus(`Đã xuất Totem Spritesheet (${sc.width}×${sc.height}px) thành công!`, false);
+      } catch (e) {
+        showStatus('Lỗi: ' + e.message, true);
+      } finally {
+        ctx.state.setAnimation(0, currentAnim, true);
+        ov.classList.remove('show');
+        isExporting = false;
+      }
+    };
+
+    // Local files & Custom ID
+    document.getElementById('localFilesInput').onchange = async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      try {
+        const atlasF = files.find(f => f.name.endsWith('.atlas') || f.name.endsWith('.atlas.txt'));
+        const skelF = files.find(f => f.name.endsWith('.skel'));
+        const jsonF = files.find(f => f.name.endsWith('.json'));
+        const pngs = files.filter(f => /\.(png|webp)$/i.test(f.name));
+        if (!atlasF || (!skelF && !jsonF) || !pngs.length) throw new Error('Hãy chọn đủ .skel/.json + .atlas + .png');
+        const map = {};
+        for (const p of pngs) map[p.name] = await loadImg(URL.createObjectURL(p));
+        await mountScene(skelF ? await skelF.arrayBuffer() : null, jsonF ? await jsonF.text() : null, await atlasF.text(), map, 'Local: ' + (skelF || jsonF).name);
+      } catch (err) {
+        showStatus(err.message, true);
+      }
+    };
+
+    document.getElementById('btnLoadCustomId').onclick = () => {
+      const raw = document.getElementById('customIdInput').value.trim().toLowerCase();
+      if (!raw) return;
+      const parts = raw.split('_');
+      const id = parts[0];
+      const sk = parts[1] || '00';
+      selectedChar = { id, name: 'Custom ' + id.toUpperCase(), mfg: 'Custom', skins: [{ code: sk, name: 'Skin ' + sk }, { code: '00', name: 'Default' }, { code: '01', name: 'Skin 01' }] };
+      selectedSkin = sk;
+      renderSkins();
+      loadRemoteModel();
+    };
+
+    document.getElementById('slotSearchInput').oninput = (e) => {
+      slotFilterTerm = e.target.value.trim().toLowerCase();
+      renderSlotInspector();
+    };
+    document.getElementById('btnShowAllSlots').onclick = () => {
+      hiddenSlots.clear();
+      if (ctx.skeleton?.slots) {
+        ctx.skeleton.slots.forEach(s => s.color.a = 1);
+      }
+      renderSlotInspector();
+      renderFrame();
+    };
+
+    renderCharList();
+    renderSkins();
+    loadRemoteModel();
+    syncLiveNkasCatalog();
+  </script>
+</body>
+</html>

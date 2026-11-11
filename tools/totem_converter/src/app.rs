@@ -25,6 +25,8 @@ pub struct TotemApp {
     preview_texture: Option<TextureHandle>,
     status_message: Option<(String, bool)>, // (message, is_error)
     is_processing: bool,
+
+    show_nikke_dialog: bool,
 }
 
 impl Default for TotemApp {
@@ -52,6 +54,8 @@ impl Default for TotemApp {
             preview_texture: None,
             status_message: None,
             is_processing: false,
+
+            show_nikke_dialog: false,
         }
     }
 }
@@ -132,10 +136,63 @@ impl TotemApp {
                 .to_lowercase();
             if ext == "gif" {
                 self.process_gif(&path, ctx);
+            } else if ext == "zip" {
+                self.process_zip(&path, ctx);
+            } else if ["png", "jpg", "jpeg", "webp", "bmp"].contains(&ext.as_str()) {
+                self.process_image(&path, ctx);
             } else {
                 self.process_video(ctx);
             }
         }
+    }
+
+    fn process_zip(&mut self, path: &std::path::Path, ctx: &egui::Context) {
+        self.status_message = Some(("Đang đọc chuỗi frame PNG 60FPS từ file ZIP...".to_string(), false));
+        self.is_processing = true;
+        match converter::decode_zip_frames(path, self.target_size, self.crop_mode, self.fps) {
+            Ok(frames) => {
+                let count = frames.len();
+                self.frames = frames;
+                self.current_frame_idx = 0;
+                self.update_preview_texture(ctx);
+                self.status_message = Some((
+                    format!(
+                        "Đã nạp thành công {} frame PNG từ file ZIP! (Kích thước: {}x{} px @ {} FPS)",
+                        count, self.target_size, self.target_size, self.fps
+                    ),
+                    false,
+                ));
+            }
+            Err(e) => {
+                self.status_message = Some((format!("Lỗi nạp file ZIP: {}", e), true));
+            }
+        }
+        self.is_processing = false;
+    }
+
+    fn process_image(&mut self, path: &std::path::Path, ctx: &egui::Context) {
+        self.status_message = Some(("Đang nạp ảnh...".to_string(), false));
+        self.is_processing = true;
+        match converter::decode_image(path, self.target_size, self.crop_mode, self.fps) {
+            Ok(frames) => {
+                let count = frames.len();
+                if count > 1 {
+                    self.status_message = Some((
+                        format!("Nhận diện dải Totem động! Đã nạp thành công {} khung hình ({}x{} px).", count, self.target_size, self.target_size),
+                        false,
+                    ));
+                } else {
+                    self.status_message = Some(("Đã nạp 1 ảnh tĩnh thành công!".to_string(), false));
+                }
+                self.frames = frames;
+                self.current_frame_idx = 0;
+                self.update_preview_texture(ctx);
+            }
+            Err(e) => {
+                self.status_message = Some((format!("Lỗi khi nạp ảnh: {}", e), true));
+            }
+        }
+        self.is_processing = false;
     }
 
     fn load_file(&mut self, path: PathBuf, ctx: &egui::Context) {
@@ -157,6 +214,11 @@ impl TotemApp {
 
         if ext == "gif" {
             self.process_gif(&path, ctx);
+        } else if ext == "zip" {
+            self.fps = 60;
+            self.process_zip(&path, ctx);
+        } else if ["png", "jpg", "jpeg", "webp", "bmp"].contains(&ext.as_str()) {
+            self.process_image(&path, ctx);
         } else {
             // Video file
             if let Some(ref ff) = self.ffmpeg_path {
@@ -440,7 +502,74 @@ impl eframe::App for TotemApp {
                 render_right_panel(&mut columns[1], self);
             });
         });
+
+        // Dialog Nikke Live2D
+        if self.show_nikke_dialog {
+            let mut is_open = true;
+            egui::Window::new("🌐 Tải Hoạt Ảnh Nikke Live2D Trực Tuyến")
+                .open(&mut is_open)
+                .resizable(false)
+                .collapsible(false)
+                .default_width(460.0)
+                .show(ctx, |ui| {
+                    ui.heading(RichText::new("Nikke Live2D Studio").strong().color(Color32::from_rgb(56, 189, 248)));
+                    ui.label("Chọn nhân vật, căn chỉnh khung hình và xuất thẳng Totem Minecraft chỉ trong 0.5 giây.");
+                    ui.add_space(8.0);
+
+                    ui.label(RichText::new("Các nhân vật phổ biến có sẵn:").strong());
+                    ui.label("Modernia (c102), Red Hood (c907), Dorothy (c220), Scarlet (c070), 2B (c810), Alice (c040), Crown (c410), Blanc (c350), Noir (c351), Rapi (c010)...");
+                    ui.add_space(10.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button(RichText::new("🚀 Mở Nikke Totem Studio (Xuất 0.5s)").strong().color(Color32::WHITE)).clicked() {
+                            open_nikke_studio();
+                        }
+
+                        if ui.button("🌐 Mở Nikke-DB Visualizer").clicked() {
+                            let _ = std::process::Command::new("cmd")
+                                .args(["/c", "start", "", "https://nikke-db.pages.dev/v/"])
+                                .spawn();
+                        }
+                    });
+
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("💡 Hướng dẫn nhanh:").strong().color(Color32::from_rgb(255, 205, 90)));
+                    ui.label("1. Bấm nút 'Mở Nikke Totem Studio' phía trên để mở giao diện web.");
+                    ui.label("2. Chọn nhân vật, zoom vào khuôn mặt/nửa thân trên và bấm 'Xuất thẳng Totem PNG'.");
+                    ui.label("3. Kéo file Totem PNG vừa tải về thả vào cửa sổ TotemConverter này.");
+                    ui.label("4. Bấm nút 'Cài thẳng vào Minecraft' để dùng ngay trong game!");
+                });
+            if !is_open {
+                self.show_nikke_dialog = false;
+            }
+        }
     }
+}
+
+fn open_nikke_studio() {
+    let mut studio_path = PathBuf::from("tools/nikke_capture/nikke_studio.html");
+    if !studio_path.exists() {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(parent) = exe_path.parent() {
+                let candidate = parent.join("nikke_capture/nikke_studio.html");
+                if candidate.exists() {
+                    studio_path = candidate;
+                }
+            }
+        }
+    }
+
+    let target = if studio_path.exists() {
+        studio_path.canonicalize().unwrap_or(studio_path).to_string_lossy().to_string()
+    } else {
+        "https://nikke-db.pages.dev/v/".to_string()
+    };
+
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", "", &target])
+        .spawn();
 }
 
 fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
@@ -452,9 +581,9 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
             ui.add_space(4.0);
 
             ui.horizontal_wrapped(|ui| {
-                if ui.button("📂 Chọn Video / GIF...").clicked() {
+                if ui.button("📂 Chọn Video / ZIP / GIF / Ảnh...").clicked() {
                     let mut dialog = rfd::FileDialog::new()
-                        .add_filter("Video & GIF", &["mp4", "gif", "webm", "avi", "mov", "mkv"]);
+                        .add_filter("Tất cả định dạng hỗ trợ", &["zip", "webm", "mp4", "gif", "png", "jpg", "jpeg", "webp", "bmp", "avi", "mov", "mkv"]);
 
                     if let Some(ref p) = app.input_path {
                         if p.is_dir() {
@@ -493,6 +622,10 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
                     if let Some(folder) = dialog.pick_folder() {
                         app.load_folder(folder, ctx);
                     }
+                }
+
+                if ui.button(RichText::new("🌐 Tải Nikke Live2D...").color(Color32::from_rgb(56, 189, 248)).strong()).clicked() {
+                    app.show_nikke_dialog = true;
                 }
             });
 

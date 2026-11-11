@@ -12,17 +12,21 @@ public class TotemEntry {
     private boolean enabled;
     private final int width;
     private final int height;
-    private final int frameCount;
+    private int frameCount;
     private int columns = 1;
     private int rows = 1;
     private int frameTime = 2; // Default 2 ticks per frame (10 FPS)
     private int fps = 20;      // Target playback FPS (10, 15, 20, 30, 45, 60...)
     private int baseFps = 60;  // Timeline Base FPS (e.g. 60 FPS)
     private TotemTextureTransform transform;
+    private long lastModified = 0;
+    private long fileSize = 0;
 
     private transient Identifier textureId;
     private transient NativeImageBackedTexture texture;
     private transient boolean textureRegistered = false;
+    private transient Identifier thumbnailTextureId = null;
+    private transient NativeImageBackedTexture thumbnailTexture = null;
     private transient RenderLayer cachedRenderLayer = null;
     private transient RenderLayer cachedEmissiveRenderLayer = null;
 
@@ -111,6 +115,18 @@ public class TotemEntry {
         invalidatePrecomputedCache();
     }
 
+    public void setGrid(int columns, int rows, int frameCount) {
+        this.columns = Math.max(1, columns);
+        this.rows = Math.max(1, rows);
+        this.frameCount = Math.max(1, frameCount);
+        if (this.frameCount > 1) {
+            getTransform().setAnimated(true);
+        } else {
+            getTransform().setAnimated(false);
+        }
+        invalidatePrecomputedCache();
+    }
+
     public int getFrameTime() {
         return frameTime;
     }
@@ -140,6 +156,22 @@ public class TotemEntry {
     public void setBaseFps(int baseFps) {
         this.baseFps = Math.max(1, baseFps);
         invalidatePrecomputedCache();
+    }
+
+    public long getLastModified() {
+        return lastModified;
+    }
+
+    public void setLastModified(long lastModified) {
+        this.lastModified = lastModified;
+    }
+
+    public long getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(long fileSize) {
+        this.fileSize = fileSize;
     }
 
     public TotemTextureTransform getTransform() {
@@ -204,6 +236,22 @@ public class TotemEntry {
 
     public void setTexture(NativeImageBackedTexture texture) {
         this.texture = texture;
+    }
+
+    public Identifier getThumbnailTextureId() {
+        return thumbnailTextureId != null ? thumbnailTextureId : textureId;
+    }
+
+    public void setThumbnailTextureId(Identifier thumbnailTextureId) {
+        this.thumbnailTextureId = thumbnailTextureId;
+    }
+
+    public NativeImageBackedTexture getThumbnailTexture() {
+        return thumbnailTexture;
+    }
+
+    public void setThumbnailTexture(NativeImageBackedTexture thumbnailTexture) {
+        this.thumbnailTexture = thumbnailTexture;
     }
 
     public void invalidatePrecomputedCache() {
@@ -465,5 +513,10 @@ public class TotemEntry {
             texture.close();
             texture = null;
         }
+        if (thumbnailTexture != null) {
+            thumbnailTexture.close();
+            thumbnailTexture = null;
+        }
+        this.thumbnailTextureId = null;
     }
 }

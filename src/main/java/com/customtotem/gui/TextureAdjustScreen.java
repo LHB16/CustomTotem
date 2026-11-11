@@ -69,6 +69,52 @@ public class TextureAdjustScreen extends Screen {
         return Text.literal("Speed: §a" + currentFps + " FPS");
     }
 
+    private void cycleGridPreset() {
+        int w = entry.getWidth();
+        int h = entry.getHeight();
+        int currentCols = entry.getColumns();
+        int currentRows = entry.getRows();
+
+        int stripFrames = (w > 0 && h >= w && h % w == 0) ? (h / w) : 1;
+
+        int[][] presets = new int[][]{
+                {1, 1, 1},
+                {16, 16, 256},
+                {17, 17, 276},
+                {15, 15, 214},
+                {18, 18, 318},
+                {14, 13, 172},
+                {16, 15, 240},
+                {8, 8, 64},
+                {4, 4, 16},
+                {1, stripFrames, stripFrames}
+        };
+
+        // If currently 1x1, try smart detection from filename first
+        TotemManager.GridDetectionResult detected = TotemManager.detectGrid(entry.getFileName(), null, w, h);
+        if (currentCols == 1 && currentRows == 1 && detected.frameCount() > 1) {
+            entry.setGrid(detected.cols(), detected.rows(), detected.frameCount());
+            if (detected.fps() > 0) entry.setFps(detected.fps());
+            if (detected.baseFps() > 0) entry.setBaseFps(detected.baseFps());
+            TotemManager.getInstance().saveConfig();
+            this.clearAndInit();
+            return;
+        }
+
+        // Cycle through presets
+        int nextIdx = 0;
+        for (int i = 0; i < presets.length; i++) {
+            if (presets[i][0] == currentCols && presets[i][1] == currentRows) {
+                nextIdx = (i + 1) % presets.length;
+                break;
+            }
+        }
+        int[] chosen = presets[nextIdx];
+        entry.setGrid(chosen[0], chosen[1], chosen[2]);
+        TotemManager.getInstance().saveConfig();
+        this.clearAndInit();
+    }
+
     @Override
     protected void init() {
         isSideBySide = this.width >= 350;
@@ -255,7 +301,17 @@ public class TextureAdjustScreen extends Screen {
         ).dimensions(0, 0, 118, 20).build();
         this.settingsList.addWidgets(flipHButton, flipVButton);
 
-        // Row 6: Animation & Speed FPS (if spritesheet detected)
+        // Row 6: Grid Preset / Manual Split
+        Text gridLabel = Text.literal("Grid: " + (entry.getFrameCount() > 1
+                ? ("§b" + entry.getColumns() + "x" + entry.getRows() + " (" + entry.getFrameCount() + "f)")
+                : "§71x1 (Tĩnh)"));
+        ButtonWidget gridButton = ButtonWidget.builder(
+                gridLabel,
+                btn -> cycleGridPreset()
+        ).dimensions(0, 0, 240, 20).build();
+        this.settingsList.addWidget(gridButton);
+
+        // Row 7: Animation & Speed FPS (if spritesheet detected)
         if (entry.getFrameCount() > 1) {
             animButton = ButtonWidget.builder(
                     Text.literal("Anim: " + (transform.isAnimated() ? "§aON" : "§7OFF")),

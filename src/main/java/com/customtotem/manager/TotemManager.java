@@ -1,11 +1,13 @@
 package com.customtotem.manager;
 
 import com.customtotem.config.TotemConfig;
+import com.customtotem.model.HandOutlineSettings;
 import com.customtotem.model.InventoryGuiSettings;
 import com.customtotem.model.TotemDisplaySettings;
 import com.customtotem.model.TotemEntry;
 import com.customtotem.model.TotemMode;
 import com.customtotem.model.TotemTextureTransform;
+import com.customtotem.util.PlatformUtil;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
@@ -23,8 +25,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 public class TotemManager {
@@ -32,11 +36,95 @@ public class TotemManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final TotemManager INSTANCE = new TotemManager();
 
-    private static final ExecutorService ASYNC_POOL = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "CustomTotem-AsyncLoader");
+    private static final int CPU_CORES = PlatformUtil.isAndroid() ? 1 : Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
+    private static final ExecutorService ASYNC_POOL = Executors.newFixedThreadPool(CPU_CORES, r -> {
+        Thread t = new Thread(r, "CustomTotem-DecodeWorker");
         t.setDaemon(true);
         return t;
     });
+
+    public static int getMaxSafeTextureSize() {
+        if (PlatformUtil.isAndroid()) {
+            return 4096;
+        }
+        // Safe cap of 8192 ensures textures fit in all GPUs and avoids GL context threading violations
+        return 8192;
+    }
+
+    public record GridDetectionResult(int cols, int rows, int frameCount, int fps, int baseFps) {}
+
+    public static GridDetectionResult detectGrid(String fileName, Path file, int width, int height) {
+        int cols = 1;
+        int rows = 1;
+        int frameCount = 1;
+        int fps = 20;
+        int baseFps = 60;
+
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)(?:^|[_-])grid(\\d+)x(\\d+)(?:[_-](\\d+)f)?").matcher(fileName);
+        if (m.find()) {
+            try {
+                cols = Integer.parseInt(m.group(1));
+                rows = Integer.parseInt(m.group(2));
+                if (m.group(3) != null) {
+                    frameCount = Integer.parseInt(m.group(3));
+                } else {
+                    frameCount = cols * rows;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        java.util.regex.Matcher fpsMatcher = java.util.regex.Pattern.compile("(?i)(?:^|[_-])(\\d+)fps").matcher(fileName);
+        if (fpsMatcher.find()) {
+            try {
+                int matched = Integer.parseInt(fpsMatcher.group(1));
+                fps = matched;
+                baseFps = matched;
+            } catch (Exception ignored) {}
+        }
+
+        if (file != null) {
+            try {
+                Path metaFile = file.resolveSibling(fileName + ".mcmeta");
+                if (!Files.exists(metaFile)) {
+                    String base = fileName.endsWith(".png") ? fileName.substring(0, fileName.length() - 4) : fileName;
+                    metaFile = file.resolveSibling(base + ".json");
+                }
+                if (Files.exists(metaFile)) {
+                    try (Reader reader = Files.newBufferedReader(metaFile)) {
+                        com.google.gson.JsonObject obj = GSON.fromJson(reader, com.google.gson.JsonObject.class);
+                        if (obj != null) {
+                            if (obj.has("columns") && obj.has("rows")) {
+                                cols = obj.get("columns").getAsInt();
+                                rows = obj.get("rows").getAsInt();
+                                frameCount = obj.has("frameCount") ? obj.get("frameCount").getAsInt() : cols * rows;
+                            }
+                            if (obj.has("fps")) {
+                                fps = obj.get("fps").getAsInt();
+                                baseFps = fps;
+                            }
+                            if (obj.has("baseFps")) {
+                                baseFps = obj.get("baseFps").getAsInt();
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (cols == 1 && rows == 1 && frameCount == 1) {
+            if (width > 0 && height >= width && height % width == 0) {
+                frameCount = Math.max(1, height / width);
+                rows = frameCount;
+                cols = 1;
+            }
+        }
+
+        if (frameCount >= 45 && baseFps < 60) {
+            baseFps = 60;
+        }
+
+        return new GridDetectionResult(cols, rows, frameCount, fps, baseFps);
+    }
 
     private final Path baseDir;
     private final Path defaultImagesDir;
@@ -53,6 +141,7 @@ public class TotemManager {
     private TotemEntry poppingTotem = null;
     private TotemMode mode = TotemMode.SEQUENTIAL;
     private TotemDisplaySettings displaySettings = new TotemDisplaySettings();
+    private HandOutlineSettings outlineSettings = new HandOutlineSettings();
     private InventoryGuiSettings inventoryGuiSettings = new InventoryGuiSettings();
     private Identifier inventoryGuiTextureId = null;
     private NativeImageBackedTexture inventoryGuiTexture = null;
@@ -73,6 +162,7 @@ public class TotemManager {
     private record PreloadedTotem(
             Path file,
             NativeImage image,
+            NativeImage thumbImage,
             int width,
             int height,
             String uniqueId,
@@ -85,7 +175,9 @@ public class TotemManager {
             int frameTime,
             int fps,
             int baseFps,
-            TotemTextureTransform transform
+            TotemTextureTransform transform,
+            long lastModified,
+            long fileSize
     ) {}
 
     private TotemManager() {
@@ -119,6 +211,9 @@ public class TotemManager {
             }
             if (loadedConfig.inventoryGuiSettings != null) {
                 this.inventoryGuiSettings = loadedConfig.inventoryGuiSettings;
+            }
+            if (loadedConfig.outlineSettings != null) {
+                this.outlineSettings = loadedConfig.outlineSettings;
             }
             if (loadedConfig.fullbright != null) {
                 this.displaySettings.setFullbright(loadedConfig.fullbright);
@@ -158,6 +253,7 @@ public class TotemManager {
         config.currentTotemId = this.currentActiveTotem != null ? this.currentActiveTotem.getId() : null;
         config.customImagesDir = this.customImagesDir != null ? this.customImagesDir.toAbsolutePath().toString() : null;
         config.displaySettings = this.displaySettings;
+        config.outlineSettings = this.outlineSettings;
         config.inventoryGuiSettings = this.inventoryGuiSettings;
         config.fullbright = this.displaySettings != null ? this.displaySettings.isFullbright() : true;
 
@@ -222,6 +318,16 @@ public class TotemManager {
         reloadAllTexturesAsync(loadedConfig, null);
     }
 
+    public void forceReloadAllTextures(TotemConfig loadedConfig, Runnable onComplete) {
+        synchronized (this) {
+            for (TotemEntry entry : entries) {
+                entry.setLastModified(0);
+                entry.setFileSize(0);
+            }
+        }
+        reloadAllTexturesAsync(loadedConfig, onComplete);
+    }
+
     public void rescanImages() {
         reloadAllTexturesAsync(loadConfigFile(), null);
     }
@@ -238,7 +344,15 @@ public class TotemManager {
 
         Path activeDir = getImagesDir();
 
-        ASYNC_POOL.submit(() -> {
+        // Snapshot existing entries in memory to compare and reuse unchanged textures
+        Map<String, TotemEntry> existingMap = new HashMap<>();
+        synchronized (this) {
+            for (TotemEntry entry : entries) {
+                existingMap.put(entry.getFileName(), entry);
+            }
+        }
+
+        CompletableFuture.runAsync(() -> {
             try {
                 if (!Files.exists(activeDir)) {
                     Files.createDirectories(activeDir);
@@ -275,200 +389,193 @@ public class TotemManager {
                     return name1.compareToIgnoreCase(name2);
                 });
 
-                reloadTotal = imageFiles.size();
-                reloadStatus = "Đang nạp và giải mã ảnh (0/" + reloadTotal + ")...";
+                // Diff checking: identify unchanged totems vs new/modified ones
+                Set<String> activeFileNames = new HashSet<>();
+                Map<String, TotemEntry> reusedMap = new HashMap<>();
+                List<Path> filesToDecode = new ArrayList<>();
 
-                List<PreloadedTotem> preloadedList = new ArrayList<>();
                 for (Path file : imageFiles) {
+                    String fileName = file.getFileName().toString();
+                    activeFileNames.add(fileName);
+
+                    long lastMod = 0;
+                    long size = 0;
                     try {
-                        String fileName = file.getFileName().toString();
-                        TotemConfig.TotemEntryConfig configEntry = configMap.get(fileName);
+                        lastMod = Files.getLastModifiedTime(file).toMillis();
+                        size = Files.size(file);
+                    } catch (Exception ignored) {}
 
-                        String idName = fileName.replace(".png", "")
-                                .replaceAll("[^a-zA-Z0-9_-]", "_")
-                                .replaceAll("^_+", "")
-                                .toLowerCase(Locale.ROOT);
-                        if (idName.isEmpty()) idName = "totem";
+                    TotemEntry existing = existingMap.get(fileName);
+                    TotemConfig.TotemEntryConfig configEntry = configMap.get(fileName);
 
-                        String uniqueId = (configEntry != null && configEntry.id != null)
-                                ? configEntry.id.replaceAll("[^a-zA-Z0-9_-]", "_").replaceAll("^_+", "").toLowerCase(Locale.ROOT)
-                                : idName + "_" + System.currentTimeMillis();
+                    boolean canReuse = existing != null
+                            && existing.isTextureRegistered()
+                            && existing.getTextureId() != null
+                            && existing.getLastModified() != 0
+                            && existing.getLastModified() == lastMod
+                            && existing.getFileSize() == size;
 
-                        NativeImage image;
-                        try (InputStream in = Files.newInputStream(file)) {
-                            image = NativeImage.read(in);
-                        }
-
-                        int width = image.getWidth();
-                        int height = image.getHeight();
-                        boolean enabled = configEntry == null || configEntry.enabled;
-                        String displayName = configEntry != null && configEntry.displayName != null ? configEntry.displayName : fileName;
-
-                        int cols = 1;
-                        int rows = 1;
-                        int frameCount = 1;
-                        int frameTime = 2;
-                        int fps = 20;
-                        int baseFps = 60;
-
-                        if (configEntry != null && configEntry.columns > 0 && configEntry.rows > 0 && configEntry.frameCount > 0) {
-                            cols = configEntry.columns;
-                            rows = configEntry.rows;
-                            frameCount = configEntry.frameCount;
-                            if (configEntry.fps > 0) {
-                                fps = configEntry.fps;
+                    if (canReuse) {
+                        if (configEntry != null) {
+                            if (configEntry.displayName != null && !configEntry.displayName.isEmpty()) {
+                                existing.setDisplayName(configEntry.displayName);
                             }
-                            if (configEntry.frameTime > 0) {
-                                frameTime = configEntry.frameTime;
+                            existing.setEnabled(configEntry.enabled);
+                            if (configEntry.fps > 0) {
+                                existing.setFps(configEntry.fps);
                             }
                             if (configEntry.baseFps > 0) {
-                                baseFps = configEntry.baseFps;
-                            }
-                        } else {
-                            // Detect grid format e.g. _grid8x8_64f
-                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("_grid(\\d+)x(\\d+)(?:_(\\d+)f)?", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(fileName);
-                            if (m.find()) {
-                                try {
-                                    cols = Integer.parseInt(m.group(1));
-                                    rows = Integer.parseInt(m.group(2));
-                                    if (m.group(3) != null) {
-                                        frameCount = Integer.parseInt(m.group(3));
-                                    } else {
-                                        frameCount = cols * rows;
-                                    }
-                                } catch (Exception ignored) {}
-                            }
-
-                            // Detect FPS from filename e.g. _30fps, _60fps
-                            java.util.regex.Matcher fpsMatcher = java.util.regex.Pattern.compile("(?i)_(\\d+)fps").matcher(fileName);
-                            if (fpsMatcher.find()) {
-                                try {
-                                    int matched = Integer.parseInt(fpsMatcher.group(1));
-                                    fps = matched;
-                                    baseFps = matched;
-                                } catch (Exception ignored) {}
-                            }
-
-                            Path metaFile = file.resolveSibling(fileName + ".mcmeta");
-                            if (!Files.exists(metaFile)) {
-                                String base = fileName.endsWith(".png") ? fileName.substring(0, fileName.length() - 4) : fileName;
-                                metaFile = file.resolveSibling(base + ".json");
-                            }
-                            if (Files.exists(metaFile)) {
-                                try (Reader reader = Files.newBufferedReader(metaFile)) {
-                                    com.google.gson.JsonObject obj = GSON.fromJson(reader, com.google.gson.JsonObject.class);
-                                    if (obj != null) {
-                                        if (obj.has("columns") && obj.has("rows")) {
-                                            cols = obj.get("columns").getAsInt();
-                                            rows = obj.get("rows").getAsInt();
-                                            frameCount = obj.has("frameCount") ? obj.get("frameCount").getAsInt() : cols * rows;
-                                        }
-                                        if (obj.has("fps")) {
-                                            fps = obj.get("fps").getAsInt();
-                                            baseFps = fps;
-                                        }
-                                        if (obj.has("baseFps")) {
-                                            baseFps = obj.get("baseFps").getAsInt();
-                                        }
-                                    }
-                                } catch (Exception ignored) {}
-                            }
-
-                            if (cols == 1 && rows == 1 && frameCount == 1) {
-                                if (width > 0 && height >= width && height % width == 0) {
-                                    frameCount = Math.max(1, height / width);
-                                    rows = frameCount;
-                                    cols = 1;
-                                }
+                                existing.setBaseFps(configEntry.baseFps);
                             }
                         }
-
-                        if (frameCount >= 45 && baseFps < 60) {
-                            baseFps = 60;
-                        }
-
-                        if (displayName.equals(fileName)) {
-                            String clean = displayName.replace(".png", "")
-                                    .replaceAll("(?i)_grid\\d+x\\d+(?:_\\d+f)?", "")
-                                    .replaceAll("(?i)_\\d+fps", "")
-                                    .replaceAll("^_+|_+$", "");
-                            if (!clean.isEmpty()) {
-                                displayName = clean;
-                            }
-                        }
-
-                        TotemTextureTransform transform = (configEntry != null && configEntry.transform != null)
-                                ? configEntry.transform : null;
-
-                        if (transform != null && transform.getResolution() > 0) {
-                            image = createResampledImage(image, cols, rows, transform.getResolution());
-                        }
-
-                        preloadedList.add(new PreloadedTotem(
-                                file, image, width, height, uniqueId, fileName, displayName,
-                                enabled, cols, rows, frameCount, frameTime, fps, baseFps, transform
-                        ));
-                    } catch (Exception e) {
-                        LOGGER.error("Failed to decode totem image file: {}", file, e);
+                        reusedMap.put(fileName, existing);
+                    } else {
+                        filesToDecode.add(file);
                     }
-                    reloadCurrent++;
-                    reloadStatus = "Đang nạp và giải mã ảnh (" + reloadCurrent + "/" + reloadTotal + ")...";
+                }
+
+                reloadTotal = filesToDecode.size();
+                if (reloadTotal == 0) {
+                    reloadStatus = "Tất cả " + imageFiles.size() + " Totem đã sẵn sàng.";
+                } else {
+                    reloadStatus = "Đang nạp " + reloadTotal + " ảnh mới/thay đổi (0/" + reloadTotal + ")...";
+                }
+
+                AtomicInteger completedCount = new AtomicInteger(0);
+                int maxSafeDim = getMaxSafeTextureSize();
+
+                List<CompletableFuture<PreloadedTotem>> futures = new ArrayList<>();
+                for (Path file : filesToDecode) {
+                    TotemConfig.TotemEntryConfig configEntry = configMap.get(file.getFileName().toString());
+                    futures.add(CompletableFuture.supplyAsync(() -> {
+                        PreloadedTotem pre = decodeTotemFile(file, configEntry, maxSafeDim);
+                        int count = completedCount.incrementAndGet();
+                        reloadCurrent = count;
+                        reloadStatus = "Đang nạp " + reloadTotal + " ảnh mới/thay đổi (" + count + "/" + reloadTotal + ")...";
+                        return pre;
+                    }, ASYNC_POOL));
+                }
+
+                List<PreloadedTotem> preloadedList = new ArrayList<>();
+                for (CompletableFuture<PreloadedTotem> f : futures) {
+                    try {
+                        PreloadedTotem p = f.get();
+                        if (p != null) {
+                            preloadedList.add(p);
+                        }
+                    } catch (Exception e) {
+                        LOGGER.error("Failed to retrieve preloaded totem result", e);
+                    }
                 }
 
                 MinecraftClient client = MinecraftClient.getInstance();
                 if (client != null) {
                     client.execute(() -> {
                         synchronized (this) {
-                            for (TotemEntry entry : entries) {
-                                if (entry.getTextureId() != null && client.getTextureManager() != null) {
-                                    client.getTextureManager().destroyTexture(entry.getTextureId());
+                            // 1. Destroy GPU textures for deleted files only
+                            for (TotemEntry existing : existingMap.values()) {
+                                if (!activeFileNames.contains(existing.getFileName())) {
+                                    if (client.getTextureManager() != null) {
+                                        if (existing.getTextureId() != null) {
+                                            client.getTextureManager().destroyTexture(existing.getTextureId());
+                                        }
+                                        if (existing.getThumbnailTextureId() != null) {
+                                            client.getTextureManager().destroyTexture(existing.getThumbnailTextureId());
+                                        }
+                                    }
+                                    existing.close();
                                 }
-                                entry.close();
                             }
-                            entries.clear();
 
+                            // 2. Register newly decoded or updated totems
+                            Map<String, TotemEntry> newlyCreated = new HashMap<>();
                             for (PreloadedTotem p : preloadedList) {
-                                Identifier textureId = Identifier.of("customtotem", "textures/" + p.uniqueId);
-                                NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + p.uniqueId, p.image);
+                                // If this file was modified, clean up its old texture first
+                                TotemEntry oldEntry = existingMap.get(p.fileName());
+                                if (oldEntry != null) {
+                                    if (client.getTextureManager() != null) {
+                                        if (oldEntry.getTextureId() != null) {
+                                            client.getTextureManager().destroyTexture(oldEntry.getTextureId());
+                                        }
+                                        if (oldEntry.getThumbnailTextureId() != null) {
+                                            client.getTextureManager().destroyTexture(oldEntry.getThumbnailTextureId());
+                                        }
+                                    }
+                                    oldEntry.close();
+                                }
+
+                                Identifier textureId = Identifier.of("customtotem", "textures/" + p.uniqueId());
+                                NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + p.uniqueId(), p.image());
                                 if (client.getTextureManager() != null) {
                                     client.getTextureManager().registerTexture(textureId, texture);
                                 }
 
-                                TotemEntry entry = new TotemEntry(p.uniqueId, p.fileName, p.displayName, p.enabled, p.width, p.height, p.cols, p.rows, p.frameCount);
-                                entry.setBaseFps(p.baseFps);
-                                if (p.fps > 0) {
-                                    entry.setFps(p.fps);
-                                } else if (p.frameTime > 0) {
-                                    entry.setFrameTime(p.frameTime);
+                                Identifier thumbId = Identifier.of("customtotem", "thumbnails/" + p.uniqueId());
+                                NativeImageBackedTexture thumbTexture = new NativeImageBackedTexture(() -> "customtotem/thumb/" + p.uniqueId(), p.thumbImage());
+                                if (client.getTextureManager() != null) {
+                                    client.getTextureManager().registerTexture(thumbId, thumbTexture);
                                 }
-                                if (p.transform != null) {
-                                    entry.setTransform(p.transform);
+
+                                TotemEntry entry = new TotemEntry(p.uniqueId(), p.fileName(), p.displayName(), p.enabled(), p.width(), p.height(), p.cols(), p.rows(), p.frameCount());
+                                entry.setBaseFps(p.baseFps());
+                                if (p.fps() > 0) {
+                                    entry.setFps(p.fps());
+                                } else if (p.frameTime() > 0) {
+                                    entry.setFrameTime(p.frameTime());
                                 }
+                                if (p.transform() != null) {
+                                    entry.setTransform(p.transform());
+                                }
+                                entry.setLastModified(p.lastModified());
+                                entry.setFileSize(p.fileSize());
                                 entry.setTextureId(textureId);
                                 entry.setTexture(texture);
                                 entry.setTextureRegistered(true);
+                                entry.setThumbnailTextureId(thumbId);
+                                entry.setThumbnailTexture(thumbTexture);
 
-                                entries.add(entry);
+                                newlyCreated.put(p.fileName(), entry);
                             }
 
-                            // Restore active totem
-                            if (loadedConfig != null && loadedConfig.currentTotemId != null) {
+                            // 3. Rebuild entries in order without recreating existing textures
+                            entries.clear();
+                            for (Path file : imageFiles) {
+                                String fn = file.getFileName().toString();
+                                TotemEntry e = newlyCreated.get(fn);
+                                if (e == null) {
+                                    e = reusedMap.get(fn);
+                                }
+                                if (e != null) {
+                                    entries.add(e);
+                                }
+                            }
+
+                            // 4. Restore/preserve active totem
+                            String activeId = this.currentActiveTotem != null ? this.currentActiveTotem.getId() : (loadedConfig != null ? loadedConfig.currentTotemId : null);
+                            TotemEntry foundActive = null;
+                            if (activeId != null) {
                                 for (TotemEntry entry : entries) {
-                                    if (entry.getId().equals(loadedConfig.currentTotemId)) {
-                                        this.currentActiveTotem = entry;
+                                    if (entry.getId().equals(activeId)) {
+                                        foundActive = entry;
                                         break;
                                     }
                                 }
                             }
 
-                            if (this.currentActiveTotem == null || !this.currentActiveTotem.isEnabled()) {
+                            if (foundActive != null && foundActive.isEnabled()) {
+                                this.currentActiveTotem = foundActive;
+                            } else if (this.currentActiveTotem == null || !this.currentActiveTotem.isEnabled() || !entries.contains(this.currentActiveTotem)) {
                                 this.currentActiveTotem = entries.stream().filter(TotemEntry::isEnabled).findFirst().orElse(null);
                             }
 
                             this.poppingTotem = this.currentActiveTotem;
                             updateActiveCache();
                             isReloading = false;
-                            reloadStatus = "Đã nạp xong " + entries.size() + " Totem!";
+                            if (newlyCreated.isEmpty()) {
+                                reloadStatus = "Đã cập nhật " + entries.size() + " Totem (không có thay đổi).";
+                            } else {
+                                reloadStatus = "Đã nạp xong " + entries.size() + " Totem! (" + newlyCreated.size() + " mới/cập nhật)";
+                            }
                             saveConfig();
 
                             if (onComplete != null) {
@@ -485,6 +592,124 @@ public class TotemManager {
                 reloadStatus = "Lỗi khi nạp ảnh: " + e.getMessage();
             }
         });
+    }
+
+    private PreloadedTotem decodeTotemFile(Path file, TotemConfig.TotemEntryConfig configEntry, int maxSafeDim) {
+        try {
+            String fileName = file.getFileName().toString();
+            String idName = fileName.replace(".png", "")
+                    .replaceAll("[^a-zA-Z0-9_-]", "_")
+                    .replaceAll("^_+", "")
+                    .toLowerCase(Locale.ROOT);
+            if (idName.isEmpty()) idName = "totem";
+
+            String uniqueId = (configEntry != null && configEntry.id != null)
+                    ? configEntry.id.replaceAll("[^a-zA-Z0-9_-]", "_").replaceAll("^_+", "").toLowerCase(Locale.ROOT)
+                    : idName + "_" + System.currentTimeMillis();
+
+            NativeImage image;
+            try (InputStream in = Files.newInputStream(file)) {
+                image = NativeImage.read(in);
+            }
+
+            int width = image.getWidth();
+            int height = image.getHeight();
+            boolean enabled = configEntry == null || configEntry.enabled;
+            String displayName = configEntry != null && configEntry.displayName != null ? configEntry.displayName : fileName;
+
+            int cols = 1;
+            int rows = 1;
+            int frameCount = 1;
+            int frameTime = 2;
+            int fps = 20;
+            int baseFps = 60;
+
+            GridDetectionResult detected = detectGrid(fileName, file, width, height);
+
+            if (configEntry != null && configEntry.columns > 0 && configEntry.rows > 0 && configEntry.frameCount > 1) {
+                cols = configEntry.columns;
+                rows = configEntry.rows;
+                frameCount = configEntry.frameCount;
+                if (configEntry.fps > 0) {
+                    fps = configEntry.fps;
+                }
+                if (configEntry.frameTime > 0) {
+                    frameTime = configEntry.frameTime;
+                }
+                if (configEntry.baseFps > 0) {
+                    baseFps = configEntry.baseFps;
+                }
+            } else {
+                // Use detected grid (also auto-heals corrupted frameCount <= 1 configs if detected.frameCount > 1)
+                cols = detected.cols();
+                rows = detected.rows();
+                frameCount = detected.frameCount();
+                fps = detected.fps();
+                baseFps = detected.baseFps();
+            }
+
+            if (displayName.equals(fileName)) {
+                String clean = displayName.replace(".png", "")
+                        .replaceAll("(?i)[_-]grid\\d+x\\d+(?:[_-]\\d+f)?", "")
+                        .replaceAll("(?i)[_-]\\d+fps", "")
+                        .replaceAll("^_+|_+$", "");
+                if (!clean.isEmpty()) {
+                    displayName = clean;
+                }
+            }
+
+            TotemTextureTransform transform = (configEntry != null && configEntry.transform != null)
+                    ? configEntry.transform : null;
+            if (transform != null && frameCount > 1 && !transform.isAnimated()) {
+                transform.setAnimated(true);
+            }
+
+            int targetRes = (transform != null && transform.getResolution() > 0) ? transform.getResolution() : 0;
+            int safeCols = Math.max(1, cols);
+            int safeRows = Math.max(1, rows);
+            int origFrameW = width / safeCols;
+            int origFrameH = height / safeRows;
+
+            // Auto-clamp if oversized (e.g. 15360x15360 or frame > 512)
+            if (targetRes <= 0) {
+                if (width > maxSafeDim || height > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
+                    int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
+                    int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                    targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
+                    if (targetRes < 16) targetRes = 16;
+                }
+            }
+
+            if (targetRes > 0 && (origFrameW > targetRes || width > maxSafeDim || height > maxSafeDim)) {
+                image = createResampledImage(image, cols, rows, targetRes);
+            }
+
+            // Extract lightweight Frame 0 thumbnail (max 128x128)
+            int curW = image.getWidth();
+            int curH = image.getHeight();
+            int curFrameW = Math.max(1, curW / safeCols);
+            int curFrameH = Math.max(1, curH / safeRows);
+            int thumbW = Math.min(curFrameW, 128);
+            int thumbH = Math.min(curFrameH, 128);
+            NativeImage thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
+            image.resizeSubRectTo(0, 0, curFrameW, curFrameH, thumbImage);
+
+            long lastModified = 0;
+            long fileSize = 0;
+            try {
+                lastModified = Files.getLastModifiedTime(file).toMillis();
+                fileSize = Files.size(file);
+            } catch (Exception ignored) {}
+
+            return new PreloadedTotem(
+                    file, image, thumbImage, width, height, uniqueId, fileName, displayName,
+                    enabled, cols, rows, frameCount, frameTime, fps, baseFps, transform,
+                    lastModified, fileSize
+            );
+        } catch (Exception e) {
+            LOGGER.error("Failed to decode totem image file: {}", file, e);
+            return null;
+        }
     }
 
     public static NativeImage createResampledImage(NativeImage originalImage, int cols, int rows, int targetRes) {
@@ -535,6 +760,25 @@ public class TotemManager {
                 client.getTextureManager().registerTexture(entry.getTextureId(), newTexture);
                 entry.setTexture(newTexture);
                 entry.setTextureRegistered(true);
+
+                // Update thumbnail texture
+                int curW = finalImage.getWidth();
+                int curH = finalImage.getHeight();
+                int fW = Math.max(1, curW / Math.max(1, entry.getColumns()));
+                int fH = Math.max(1, curH / Math.max(1, entry.getRows()));
+                int tW = Math.min(fW, 128);
+                int tH = Math.min(fH, 128);
+                NativeImage thumbImg = new NativeImage(finalImage.getFormat(), tW, tH, false);
+                finalImage.resizeSubRectTo(0, 0, fW, fH, thumbImg);
+
+                Identifier thumbId = Identifier.of("customtotem", "thumbnails/" + entry.getId());
+                NativeImageBackedTexture newThumbTex = new NativeImageBackedTexture(() -> "customtotem/thumb/" + entry.getId(), thumbImg);
+                if (entry.getThumbnailTexture() != null) {
+                    entry.getThumbnailTexture().close();
+                }
+                client.getTextureManager().registerTexture(thumbId, newThumbTex);
+                entry.setThumbnailTexture(newThumbTex);
+                entry.setThumbnailTextureId(thumbId);
             }
             entry.invalidatePrecomputedCache();
         } catch (Exception e) {
@@ -556,12 +800,46 @@ public class TotemManager {
                 if (Files.exists(file)) {
                     try (InputStream in = Files.newInputStream(file)) {
                         NativeImage image = NativeImage.read(in);
-                        if (entry.getTransform().getResolution() > 0) {
-                            image = createResampledImage(image, entry.getColumns(), entry.getRows(), entry.getTransform().getResolution());
+                        int maxSafeDim = getMaxSafeTextureSize();
+                        int targetRes = entry.getTransform().getResolution();
+                        int safeCols = Math.max(1, entry.getColumns());
+                        int safeRows = Math.max(1, entry.getRows());
+                        int origFrameW = image.getWidth() / safeCols;
+                        int origFrameH = image.getHeight() / safeRows;
+
+                        if (targetRes <= 0) {
+                            if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
+                                int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
+                                int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                                targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
+                                if (targetRes < 16) targetRes = 16;
+                            }
                         }
+
+                        if (targetRes > 0 && (origFrameW > targetRes || image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim)) {
+                            image = createResampledImage(image, entry.getColumns(), entry.getRows(), targetRes);
+                        }
+
                         NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), image);
                         client.getTextureManager().registerTexture(entry.getTextureId(), texture);
                         entry.setTexture(texture);
+
+                        if (entry.getThumbnailTextureId() == null || client.getTextureManager().getTexture(entry.getThumbnailTextureId()) == null) {
+                            int curW = image.getWidth();
+                            int curH = image.getHeight();
+                            int curFrameW = Math.max(1, curW / safeCols);
+                            int curFrameH = Math.max(1, curH / safeRows);
+                            int thumbW = Math.min(curFrameW, 128);
+                            int thumbH = Math.min(curFrameH, 128);
+                            NativeImage thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
+                            image.resizeSubRectTo(0, 0, curFrameW, curFrameH, thumbImage);
+
+                            Identifier thumbId = Identifier.of("customtotem", "thumbnails/" + entry.getId());
+                            NativeImageBackedTexture thumbTex = new NativeImageBackedTexture(() -> "customtotem/thumb/" + entry.getId(), thumbImage);
+                            client.getTextureManager().registerTexture(thumbId, thumbTex);
+                            entry.setThumbnailTexture(thumbTex);
+                            entry.setThumbnailTextureId(thumbId);
+                        }
                     } catch (Exception e) {
                         LOGGER.error("Failed to restore texture for entry: {}", entry.getFileName(), e);
                     }
@@ -592,13 +870,6 @@ public class TotemManager {
             int width = image.getWidth();
             int height = image.getHeight();
 
-            Identifier textureId = Identifier.of("customtotem", "textures/" + uniqueId);
-            NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + uniqueId, image);
-            MinecraftClient client = MinecraftClient.getInstance();
-            if (client != null && client.getTextureManager() != null) {
-                client.getTextureManager().registerTexture(textureId, texture);
-            }
-
             boolean enabled = configEntry == null || configEntry.enabled;
             String displayName = configEntry != null && configEntry.displayName != null ? configEntry.displayName : fileName;
 
@@ -608,7 +879,9 @@ public class TotemManager {
             int fps = 20;
             int baseFps = (configEntry != null && configEntry.baseFps > 0) ? configEntry.baseFps : 60;
 
-            if (configEntry != null && configEntry.columns > 0 && configEntry.rows > 0 && configEntry.frameCount > 0) {
+            GridDetectionResult detected = detectGrid(fileName, file, width, height);
+
+            if (configEntry != null && configEntry.columns > 0 && configEntry.rows > 0 && configEntry.frameCount > 1) {
                 cols = configEntry.columns;
                 rows = configEntry.rows;
                 frameCount = configEntry.frameCount;
@@ -616,74 +889,65 @@ public class TotemManager {
                     fps = configEntry.fps;
                 }
             } else {
-                java.util.regex.Matcher m = java.util.regex.Pattern.compile("_grid(\\d+)x(\\d+)(?:_(\\d+)f)?(?:\\.png)?$", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(fileName);
-                if (m.find()) {
-                    try {
-                        cols = Integer.parseInt(m.group(1));
-                        rows = Integer.parseInt(m.group(2));
-                        if (m.group(3) != null) {
-                            frameCount = Integer.parseInt(m.group(3));
-                        } else {
-                            frameCount = cols * rows;
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                java.util.regex.Matcher fpsMatcher = java.util.regex.Pattern.compile("(?i)_(\\d+)fps").matcher(fileName);
-                if (fpsMatcher.find()) {
-                    try {
-                        int matched = Integer.parseInt(fpsMatcher.group(1));
-                        fps = matched;
-                        baseFps = matched;
-                    } catch (Exception ignored) {}
-                }
-
-                Path metaFile = file.resolveSibling(fileName + ".mcmeta");
-                if (!Files.exists(metaFile)) {
-                    String base = fileName.endsWith(".png") ? fileName.substring(0, fileName.length() - 4) : fileName;
-                    metaFile = file.resolveSibling(base + ".json");
-                }
-                if (Files.exists(metaFile)) {
-                    try (Reader reader = Files.newBufferedReader(metaFile)) {
-                        com.google.gson.JsonObject obj = GSON.fromJson(reader, com.google.gson.JsonObject.class);
-                        if (obj != null) {
-                            if (obj.has("columns") && obj.has("rows")) {
-                                cols = obj.get("columns").getAsInt();
-                                rows = obj.get("rows").getAsInt();
-                                frameCount = obj.has("frameCount") ? obj.get("frameCount").getAsInt() : cols * rows;
-                            }
-                            if (obj.has("fps")) {
-                                fps = obj.get("fps").getAsInt();
-                                baseFps = fps;
-                            }
-                            if (obj.has("baseFps")) {
-                                baseFps = obj.get("baseFps").getAsInt();
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                if (cols == 1 && rows == 1 && frameCount == 1) {
-                    if (width > 0 && height >= width && height % width == 0) {
-                        frameCount = Math.max(1, height / width);
-                        rows = frameCount;
-                        cols = 1;
-                    }
-                }
-            }
-
-            if (frameCount >= 45 && baseFps < 60) {
-                baseFps = 60;
+                cols = detected.cols();
+                rows = detected.rows();
+                frameCount = detected.frameCount();
+                fps = detected.fps();
+                baseFps = detected.baseFps();
             }
 
             if (displayName.equals(fileName)) {
                 String clean = displayName.replace(".png", "")
-                        .replaceAll("(?i)_grid\\d+x\\d+(?:_\\d+f)?", "")
-                        .replaceAll("(?i)_\\d+fps", "")
+                        .replaceAll("(?i)[_-]grid\\d+x\\d+(?:[_-]\\d+f)?", "")
+                        .replaceAll("(?i)[_-]\\d+fps", "")
                         .replaceAll("^_+|_+$", "");
                 if (!clean.isEmpty()) {
                     displayName = clean;
                 }
+            }
+
+            TotemTextureTransform transform = (configEntry != null && configEntry.transform != null)
+                    ? configEntry.transform : null;
+
+            int targetRes = (transform != null && transform.getResolution() > 0) ? transform.getResolution() : 0;
+            int safeCols = Math.max(1, cols);
+            int safeRows = Math.max(1, rows);
+            int origFrameW = width / safeCols;
+            int origFrameH = height / safeRows;
+            int maxSafeDim = getMaxSafeTextureSize();
+
+            if (targetRes <= 0) {
+                if (width > maxSafeDim || height > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
+                    int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
+                    int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                    targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
+                    if (targetRes < 16) targetRes = 16;
+                }
+            }
+
+            if (targetRes > 0 && (origFrameW > targetRes || width > maxSafeDim || height > maxSafeDim)) {
+                image = createResampledImage(image, cols, rows, targetRes);
+            }
+
+            // Extract Frame 0 thumbnail
+            int curW = image.getWidth();
+            int curH = image.getHeight();
+            int curFrameW = Math.max(1, curW / safeCols);
+            int curFrameH = Math.max(1, curH / safeRows);
+            int thumbW = Math.min(curFrameW, 128);
+            int thumbH = Math.min(curFrameH, 128);
+            NativeImage thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
+            image.resizeSubRectTo(0, 0, curFrameW, curFrameH, thumbImage);
+
+            Identifier thumbId = Identifier.of("customtotem", "thumbnails/" + uniqueId);
+            NativeImageBackedTexture thumbTexture = new NativeImageBackedTexture(() -> "customtotem/thumb/" + uniqueId, thumbImage);
+
+            Identifier textureId = Identifier.of("customtotem", "textures/" + uniqueId);
+            NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + uniqueId, image);
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client != null && client.getTextureManager() != null) {
+                client.getTextureManager().registerTexture(textureId, texture);
+                client.getTextureManager().registerTexture(thumbId, thumbTexture);
             }
 
             TotemEntry entry = new TotemEntry(uniqueId, fileName, displayName, enabled, width, height, cols, rows, frameCount);
@@ -693,15 +957,18 @@ public class TotemManager {
             } else if (configEntry != null && configEntry.frameTime > 0) {
                 entry.setFrameTime(configEntry.frameTime);
             }
-            if (configEntry != null && configEntry.transform != null) {
-                entry.setTransform(configEntry.transform);
+            if (transform != null) {
+                entry.setTransform(transform);
             }
+            try {
+                entry.setLastModified(Files.getLastModifiedTime(file).toMillis());
+                entry.setFileSize(Files.size(file));
+            } catch (Exception ignored) {}
             entry.setTextureId(textureId);
             entry.setTexture(texture);
             entry.setTextureRegistered(true);
-            if (entry.getTransform().getResolution() > 0) {
-                applyResolution(entry);
-            }
+            entry.setThumbnailTextureId(thumbId);
+            entry.setThumbnailTexture(thumbTexture);
 
             entries.add(entry);
             updateActiveCache();
@@ -747,7 +1014,15 @@ public class TotemManager {
     public synchronized void removeTotem(TotemEntry entry) {
         if (entry == null) return;
 
-        MinecraftClient.getInstance().getTextureManager().destroyTexture(entry.getTextureId());
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client != null && client.getTextureManager() != null) {
+            if (entry.getTextureId() != null) {
+                client.getTextureManager().destroyTexture(entry.getTextureId());
+            }
+            if (entry.getThumbnailTextureId() != null) {
+                client.getTextureManager().destroyTexture(entry.getThumbnailTextureId());
+            }
+        }
         entry.close();
 
         try {
@@ -880,6 +1155,13 @@ public class TotemManager {
 
     public TotemDisplaySettings getDisplaySettings() {
         return displaySettings;
+    }
+
+    public HandOutlineSettings getOutlineSettings() {
+        if (outlineSettings == null) {
+            outlineSettings = new HandOutlineSettings();
+        }
+        return outlineSettings;
     }
 
     public boolean isFullbright() {
@@ -1028,23 +1310,45 @@ public class TotemManager {
 
         try (InputStream in = Files.newInputStream(imgPath)) {
             NativeImage image = NativeImage.read(in);
+            int origW = image.getWidth();
+            int origH = image.getHeight();
+            int maxSafeDim = getMaxSafeTextureSize();
+            if (origW > maxSafeDim || origH > maxSafeDim) {
+                LOGGER.warn("Inventory GUI image {} exceeds max safe size ({}x{}), downscaling...", fileName, origW, origH);
+                int targetW = maxSafeDim;
+                int targetH = (int) Math.max(1, Math.round((float) maxSafeDim * (float) origH / (float) origW));
+                if (origH > origW) {
+                    targetH = maxSafeDim;
+                    targetW = (int) Math.max(1, Math.round((float) maxSafeDim * (float) origW / (float) origH));
+                }
+                NativeImage downscaled = new NativeImage(image.getFormat(), targetW, targetH, false);
+                image.resizeSubRectTo(0, 0, origW, origH, downscaled);
+                image.close();
+                image = downscaled;
+            }
+
             this.inventoryGuiImageWidth = image.getWidth();
             this.inventoryGuiImageHeight = image.getHeight();
             Identifier id = Identifier.of("customtotem", "inventory_gui_" + Math.abs(fileName.hashCode()));
-            NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/inventory_gui", image);
+            final NativeImage finalImage = image;
 
             MinecraftClient client = MinecraftClient.getInstance();
             if (client != null) {
                 client.execute(() -> {
-                    if (inventoryGuiTexture != null) {
-                        inventoryGuiTexture.close();
+                    try {
+                        NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/inventory_gui", finalImage);
+                        if (inventoryGuiTexture != null) {
+                            inventoryGuiTexture.close();
+                        }
+                        inventoryGuiTexture = texture;
+                        inventoryGuiTextureId = id;
+                        if (client.getTextureManager() != null) {
+                            client.getTextureManager().registerTexture(id, texture);
+                        }
+                        LOGGER.info("Registered custom inventory GUI texture: {}", fileName);
+                    } catch (Exception e) {
+                        LOGGER.error("Failed to register inventory GUI texture on render thread", e);
                     }
-                    inventoryGuiTexture = texture;
-                    inventoryGuiTextureId = id;
-                    if (client.getTextureManager() != null) {
-                        client.getTextureManager().registerTexture(id, texture);
-                    }
-                    LOGGER.info("Registered custom inventory GUI texture: {}", fileName);
                 });
             }
         } catch (Exception e) {

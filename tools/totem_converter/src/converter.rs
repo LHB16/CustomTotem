@@ -113,6 +113,34 @@ pub fn decode_gif(path: &Path, target_size: u32, crop_mode: CropMode) -> Result<
     Ok(result)
 }
 
+pub fn decode_image(path: &Path, target_size: u32, crop_mode: CropMode, fps: u32) -> Result<Vec<FrameData>, String> {
+    let img = image::open(path).map_err(|e| format!("Không thể mở ảnh: {}", e))?.to_rgba8();
+    let (w, h) = img.dimensions();
+    let delay_ms = (1000 / fps).max(1);
+
+    // Nếu ảnh là dải spritesheet dọc (chiều cao lớn hơn chiều rộng và chia hết cho chiều rộng)
+    if h > w && h % w == 0 {
+        let frame_count = h / w;
+        let mut frames = Vec::with_capacity(frame_count as usize);
+        for i in 0..frame_count {
+            let cropped = imageops::crop_imm(&img, 0, i * w, w, w).to_image();
+            let processed = process_frame(&cropped, target_size, crop_mode);
+            frames.push(FrameData {
+                image: processed,
+                delay_ms,
+            });
+        }
+        return Ok(frames);
+    }
+
+    // Ảnh đơn lẻ thông thường
+    let processed = process_frame(&img, target_size, crop_mode);
+    Ok(vec![FrameData {
+        image: processed,
+        delay_ms,
+    }])
+}
+
 pub fn get_video_duration(ffmpeg_path: &Path, path: &Path) -> Result<f32, String> {
     // Run ffmpeg -i <file> and parse Duration: 00:00:00.00 from stderr
     let output = Command::new(ffmpeg_path)
@@ -468,6 +496,90 @@ pub fn load_image_sequence(
     for path in &image_files {
         let img = image::open(path)
             .map_err(|e| format!("Không thể mở ảnh {}: {}", path.file_name().unwrap_or_default().to_string_lossy(), e))?;
+        let rgba = img.to_rgba8();
+        let processed = process_frame(&rgba, target_size, crop_mode);
+        frames.push(FrameData {
+            image: processed,
+            delay_ms,
+        });
+    }
+
+    Ok(frames)
+}
+
+/// Parses an uncompressed (Store mode, method=0) .zip file containing PNG/JPG/WebP frames
+/// (such as the 60FPS PNG frame sequence .zip exported by Nikke Live2D Studio)
+pub fn decode_zip_frames(
+    zip_path: &Path,
+    target_size: u32,
+    crop_mode: CropMode,
+    fps: u32,
+) -> Result<Vec<FrameData>, String> {
+    let bytes = std::fs::read(zip_path)
+        .map_err(|e| format!("Không thể đọc file ZIP: {}", e))?;
+
+    let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut ptr = 0usize;
+
+    while ptr + 30 <= bytes.len() {
+        let sig = u32::from_le_bytes([bytes[ptr], bytes[ptr + 1], bytes[ptr + 2], bytes[ptr + 3]]);
+        if sig != 0x04034b50 {
+            break; // Reached central directory or end of local headers
+        }
+
+        let compression = u16::from_le_bytes([bytes[ptr + 8], bytes[ptr + 9]]);
+        let comp_size = u32::from_le_bytes([bytes[ptr + 18], bytes[ptr + 19], bytes[ptr + 20], bytes[ptr + 21]]) as usize;
+        let name_len = u16::from_le_bytes([bytes[ptr + 26], bytes[ptr + 27]]) as usize;
+        let extra_len = u16::from_le_bytes([bytes[ptr + 28], bytes[ptr + 29]]) as usize;
+
+        let name_start = ptr + 30;
+        let data_start = name_start + name_len + extra_len;
+        let data_end = data_start + comp_size;
+
+        if data_end > bytes.len() {
+            break;
+        }
+
+        let file_name = String::from_utf8_lossy(&bytes[name_start..name_start + name_len]).to_string();
+        if compression == 0 && comp_size > 0 {
+            let lower = file_name.to_lowercase();
+            if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".webp") {
+                entries.push((file_name, bytes[data_start..data_end].to_vec()));
+            }
+        }
+
+        ptr = data_end;
+    }
+
+    // Fallback to Windows tar.exe extraction if the ZIP uses Deflate compression
+    if entries.is_empty() {
+        let temp_dir = std::env::temp_dir().join(format!("totem_zip_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let status = Command::new("tar.exe")
+            .args(["-xf", &zip_path.to_string_lossy(), "-C", &temp_dir.to_string_lossy()])
+            .output();
+
+        if let Ok(out) = status {
+            if out.status.success() {
+                let res = load_image_sequence(&temp_dir, target_size, crop_mode, fps);
+                let _ = std::fs::remove_dir_all(&temp_dir);
+                return res;
+            }
+        }
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        return Err("Không tìm thấy frame ảnh PNG nào trong file ZIP!".to_string());
+    }
+
+    entries.sort_by(|a, b| natural_sort_key(&a.0).cmp(&natural_sort_key(&b.0)));
+
+    let delay_ms = (1000 / fps).max(1);
+    let mut frames = Vec::with_capacity(entries.len());
+
+    for (name, img_bytes) in entries {
+        let img = image::load_from_memory(&img_bytes)
+            .map_err(|e| format!("Lỗi đọc frame {} trong ZIP: {}", name, e))?;
         let rgba = img.to_rgba8();
         let processed = process_frame(&rgba, target_size, crop_mode);
         frames.push(FrameData {
