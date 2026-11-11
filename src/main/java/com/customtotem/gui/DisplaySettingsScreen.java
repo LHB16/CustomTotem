@@ -55,6 +55,61 @@ public class DisplaySettingsScreen extends Screen {
         ).dimensions(0, 0, 240, 20).build();
         this.settingsList.addWidget(fullbrightBtn);
 
+        // Section: Global Texture & Animation
+        this.settingsList.addHeader(Text.literal("§e--- Global Texture & Animation ---"), 0xFFFFFF55);
+
+        // Global Resolution button
+        ButtonWidget globalResBtn = ButtonWidget.builder(
+                getGlobalResButtonMessage(),
+                btn -> {
+                    int[] resolutions = {0, 64, 128, 256, 512, 1024};
+                    int current = settings.getGlobalResolution();
+                    int nextIdx = 0;
+                    for (int i = 0; i < resolutions.length; i++) {
+                        if (resolutions[i] == current) {
+                            nextIdx = (i + 1) % resolutions.length;
+                            break;
+                        }
+                    }
+                    settings.setGlobalResolution(resolutions[nextIdx]);
+                    TotemManager.getInstance().saveConfig();
+                    TotemManager.getInstance().applyGlobalResolution();
+                    btn.setMessage(getGlobalResButtonMessage());
+                }
+        ).dimensions(0, 0, 240, 20).build();
+        this.settingsList.addWidget(globalResBtn);
+
+        // Global Animation & Global FPS (side-by-side)
+        ButtonWidget globalAnimBtn = ButtonWidget.builder(
+                getGlobalAnimButtonMessage(),
+                btn -> {
+                    int current = settings.getGlobalAnimation();
+                    int next = (current + 1) % 3;
+                    settings.setGlobalAnimation(next);
+                    TotemManager.getInstance().saveConfig();
+                    btn.setMessage(getGlobalAnimButtonMessage());
+                }
+        ).dimensions(0, 0, 118, 20).build();
+
+        ButtonWidget globalFpsBtn = ButtonWidget.builder(
+                getGlobalFpsButtonMessage(),
+                btn -> {
+                    int[] fpsOptions = {0, 15, 20, 30, 60};
+                    int current = settings.getGlobalFps();
+                    int nextIdx = 0;
+                    for (int i = 0; i < fpsOptions.length; i++) {
+                        if (fpsOptions[i] == current) {
+                            nextIdx = (i + 1) % fpsOptions.length;
+                            break;
+                        }
+                    }
+                    settings.setGlobalFps(fpsOptions[nextIdx]);
+                    TotemManager.getInstance().saveConfig();
+                    btn.setMessage(getGlobalFpsButtonMessage());
+                }
+        ).dimensions(0, 0, 118, 20).build();
+        this.settingsList.addWidgets(globalAnimBtn, globalFpsBtn);
+
         // Section: First Person
         this.settingsList.addHeader(Text.literal("§6--- First Person View ---"), 0xFFFFAA00);
 
@@ -242,6 +297,23 @@ public class DisplaySettingsScreen extends Screen {
         if (this.client != null) {
             this.client.setScreen(parent);
         }
+    }
+
+    private Text getGlobalResButtonMessage() {
+        int res = settings.getGlobalResolution();
+        return res <= 0 ? Text.literal("Global Res: §aAuto (Per-Totem)") : Text.literal("Global Res: §b" + res + "x" + res + " (Forced)");
+    }
+
+    private Text getGlobalAnimButtonMessage() {
+        int anim = settings.getGlobalAnimation();
+        if (anim == 1) return Text.literal("Global Anim: §bForce ON");
+        if (anim == 2) return Text.literal("Global Anim: §cForce OFF");
+        return Text.literal("Global Anim: §aDefault");
+    }
+
+    private Text getGlobalFpsButtonMessage() {
+        int fps = settings.getGlobalFps();
+        return fps <= 0 ? Text.literal("Global FPS: §aDefault") : Text.literal("Global FPS: §b" + fps + " FPS");
     }
 
     @Override

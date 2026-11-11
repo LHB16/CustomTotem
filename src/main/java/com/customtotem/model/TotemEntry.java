@@ -273,6 +273,34 @@ public class TotemEntry {
         return this.textureRegistered && this.texture != null;
     }
 
+    public boolean isEffectivelyAnimated() {
+        if (frameCount <= 1) return false;
+        TotemDisplaySettings ds = com.customtotem.manager.TotemManager.getInstance().getDisplaySettings();
+        if (ds != null) {
+            int gAnim = ds.getGlobalAnimation();
+            if (gAnim == 2) return false; // Force OFF
+            if (gAnim == 1) return true;  // Force ON
+        }
+        return getTransform().isAnimated();
+    }
+
+    public int getEffectiveFps() {
+        TotemDisplaySettings ds = com.customtotem.manager.TotemManager.getInstance().getDisplaySettings();
+        if (ds != null && ds.getGlobalFps() > 0) {
+            return ds.getGlobalFps();
+        }
+        return (fps > 0) ? fps : getBaseFps();
+    }
+
+    public int getEffectiveResolution() {
+        TotemDisplaySettings ds = com.customtotem.manager.TotemManager.getInstance().getDisplaySettings();
+        if (ds != null && ds.getGlobalResolution() > 0) {
+            return ds.getGlobalResolution();
+        }
+        TotemTextureTransform t = getTransform();
+        return t != null ? t.getResolution() : 0;
+    }
+
     public void invalidatePrecomputedCache() {
         this.precomputedFrameUVs = null;
         this.cachedQuadBounds = null;
@@ -280,11 +308,11 @@ public class TotemEntry {
     }
 
     public int getCurrentFrame(long timeOrTick) {
-        if (!getTransform().isAnimated() || frameCount <= 1) {
+        if (!isEffectivelyAnimated()) {
             return 0;
         }
         int effectiveBaseFps = getBaseFps();
-        int displayFps = (fps > 0) ? fps : effectiveBaseFps;
+        int displayFps = getEffectiveFps();
 
         if (displayFps >= effectiveBaseFps) {
             // Smooth playback at base FPS
@@ -300,8 +328,7 @@ public class TotemEntry {
     }
 
     public float getEstimatedVramMb() {
-        TotemTextureTransform t = getTransform();
-        int res = t != null ? t.getResolution() : 0;
+        int res = getEffectiveResolution();
         return calculateVramMb(res);
     }
 
@@ -388,8 +415,8 @@ public class TotemEntry {
             int cols = Math.max(1, columns);
             int rws = Math.max(1, rows);
 
-            int frameW = (t.isAnimated() && frameCount > 1) ? width / cols : width;
-            int frameH = (t.isAnimated() && frameCount > 1) ? height / rws : height;
+            int frameW = (isEffectivelyAnimated()) ? width / cols : width;
+            int frameH = (isEffectivelyAnimated()) ? height / rws : height;
             float aspect = (float) frameW / (float) Math.max(1, frameH);
 
             float scale = t.getScale();

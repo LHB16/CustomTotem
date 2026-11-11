@@ -36,7 +36,36 @@ public class TotemDisplaySettings {
     private float tpTranslationZ = 1.0f;
     private float tpScale = 0.55f;
 
+    // Global Totem texture and animation overrides
+    private int globalResolution = 0; // 0 = Auto (Per-Totem), 64, 128, 256, 512, 1024
+    private int globalAnimation = 0;  // 0 = Default (Per-Totem), 1 = Force ON, 2 = Force OFF
+    private int globalFps = 0;        // 0 = Default (Per-Totem), 10, 15, 20, 30, 45, 60
+
     public TotemDisplaySettings() {
+    }
+
+    public int getGlobalResolution() {
+        return globalResolution;
+    }
+
+    public void setGlobalResolution(int globalResolution) {
+        this.globalResolution = Math.max(0, globalResolution);
+    }
+
+    public int getGlobalAnimation() {
+        return globalAnimation;
+    }
+
+    public void setGlobalAnimation(int globalAnimation) {
+        this.globalAnimation = globalAnimation;
+    }
+
+    public int getGlobalFps() {
+        return globalFps;
+    }
+
+    public void setGlobalFps(int globalFps) {
+        this.globalFps = Math.max(0, globalFps);
     }
 
     public Preset getPreset() {

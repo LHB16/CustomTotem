@@ -105,40 +105,40 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             // Edit / Adjust Canvas button
             this.editButton = ButtonWidget.builder(
-                    Text.literal("Edit"),
+                    Text.literal("✎"),
                     btn -> {
                         if (MinecraftClient.getInstance() != null) {
                             MinecraftClient.getInstance().setScreen(new TextureAdjustScreen(screen, entry));
                         }
                     }
-            ).dimensions(0, 0, 32, 20).build();
+            ).dimensions(0, 0, 20, 20).build();
 
             // Move up button
             this.upButton = ButtonWidget.builder(
-                    Text.literal("Up"),
+                    Text.literal("▲"),
                     btn -> {
                         TotemManager.getInstance().moveUp(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 26, 20).build();
+            ).dimensions(0, 0, 20, 20).build();
 
             // Move down button
             this.downButton = ButtonWidget.builder(
-                    Text.literal("Down"),
+                    Text.literal("▼"),
                     btn -> {
                         TotemManager.getInstance().moveDown(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 34, 20).build();
+            ).dimensions(0, 0, 20, 20).build();
 
             // Delete button
             this.deleteButton = ButtonWidget.builder(
-                    Text.literal("§cDelete"),
+                    Text.literal("§c✕"),
                     btn -> {
                         TotemManager.getInstance().removeTotem(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 42, 20).build();
+            ).dimensions(0, 0, 20, 20).build();
 
             this.children.add(toggleButton);
             this.children.add(selectButton);
@@ -216,7 +216,7 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             } else if (entry.isVramHigh()) {
                 name = "§e⚠ " + name;
             }
-            int maxNameW = Math.max(45, width - 290 - 34);
+            int maxNameW = Math.max(45, width - 240 - 34);
             if (textRenderer.getWidth(name) > maxNameW) {
                 name = textRenderer.trimToWidth(name, Math.max(30, maxNameW - 8)) + "...";
             }
@@ -241,25 +241,25 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             int currentRight = x + width;
             int btnY = y + 4;
 
-            deleteButton.setX(currentRight - 42);
+            deleteButton.setX(currentRight - 20);
             deleteButton.setY(btnY);
             deleteButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 45;
+            currentRight -= 23;
 
-            downButton.setX(currentRight - 34);
+            downButton.setX(currentRight - 20);
             downButton.setY(btnY);
             downButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 37;
+            currentRight -= 23;
 
-            upButton.setX(currentRight - 26);
+            upButton.setX(currentRight - 20);
             upButton.setY(btnY);
             upButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 29;
+            currentRight -= 23;
 
-            editButton.setX(currentRight - 32);
+            editButton.setX(currentRight - 20);
             editButton.setY(btnY);
             editButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 35;
+            currentRight -= 23;
 
             unloadButton.setX(currentRight - 44);
             unloadButton.setY(btnY);

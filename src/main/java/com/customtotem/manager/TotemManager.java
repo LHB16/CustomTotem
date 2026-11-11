@@ -795,7 +795,7 @@ public class TotemManager {
 
         try (InputStream in = Files.newInputStream(file)) {
             NativeImage originalImage = NativeImage.read(in);
-            int targetRes = entry.getTransform().getResolution();
+            int targetRes = entry.getEffectiveResolution();
             NativeImage finalImage = createResampledImage(originalImage, entry.getColumns(), entry.getRows(), targetRes);
 
             MinecraftClient client = MinecraftClient.getInstance();
@@ -866,7 +866,7 @@ public class TotemManager {
             try (InputStream in = Files.newInputStream(file)) {
                 NativeImage image = NativeImage.read(in);
                 int maxSafeDim = getMaxSafeTextureSize();
-                int targetRes = entry.getTransform().getResolution();
+                int targetRes = entry.getEffectiveResolution();
                 int safeCols = Math.max(1, entry.getColumns());
                 int safeRows = Math.max(1, entry.getRows());
                 int origFrameW = image.getWidth() / safeCols;
@@ -925,8 +925,39 @@ public class TotemManager {
         }
     }
 
+    public synchronized void applyGlobalResolution() {
+        for (TotemEntry entry : entries) {
+            entry.invalidatePrecomputedCache();
+            if (entry.isLoadedInRam()) {
+                applyResolution(entry);
+            }
+        }
+    }
+
     public synchronized void unloadTotemTexture(TotemEntry entry) {
         if (entry == null) return;
+
+        // If the entry being unloaded is currently active, switch to the first active totem or default
+        if (this.currentActiveTotem == entry) {
+            TotemEntry nextActive = null;
+            for (TotemEntry e : entries) {
+                if (e != entry && e.isEnabled()) {
+                    nextActive = e;
+                    break;
+                }
+            }
+            if (nextActive != null) {
+                this.currentActiveTotem = nextActive;
+                this.poppingTotem = nextActive;
+                ensureTextureRegisteredAsync(nextActive, null);
+            } else {
+                this.currentActiveTotem = null;
+                this.poppingTotem = null;
+            }
+            updateActiveCache();
+            saveConfig();
+        }
+
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null) return;
         if (client.isOnThread()) {
@@ -963,7 +994,7 @@ public class TotemManager {
         try (InputStream in = Files.newInputStream(file)) {
             NativeImage image = NativeImage.read(in);
             int maxSafeDim = getMaxSafeTextureSize();
-            int targetRes = entry.getTransform().getResolution();
+            int targetRes = entry.getEffectiveResolution();
             int safeCols = Math.max(1, entry.getColumns());
             int safeRows = Math.max(1, entry.getRows());
             int origFrameW = image.getWidth() / safeCols;
