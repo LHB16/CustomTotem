@@ -310,6 +310,25 @@ public class FolderBrowserScreen extends Screen {
         }
     }
 
+    public void enableDisabledImage(Path file) {
+        try {
+            boolean success = TotemManager.getInstance().enableDisabledTotem(file);
+            if (success) {
+                setStatus("§aSuccessfully re-enabled Totem: " + file.getFileName().toString(), false);
+                if (this.parent instanceof TotemManagerScreen tms) {
+                    tms.refreshList();
+                }
+                if (this.fileListWidget != null) {
+                    this.fileListWidget.refresh();
+                }
+            } else {
+                setStatus("§cCould not re-enable: " + file.getFileName().toString(), true);
+            }
+        } catch (Exception e) {
+            setStatus("§cError re-enabling image: " + e.getMessage(), true);
+        }
+    }
+
     public void setStatus(String message, boolean isError) {
         this.statusMessage = message;
         this.statusColor = isError ? 0xFFFF5555 : 0xFF55FF55;
@@ -496,11 +515,12 @@ public class FolderBrowserScreen extends Screen {
             // Up entry if has parent
             Path parent = current.getParent();
             if (parent != null && Files.exists(parent)) {
-                this.addEntry(new FileItemWidget(parent, ".. [Parent Folder]", true, true));
+                this.addEntry(new FileItemWidget(parent, ".. [Parent Folder]", true, true, false));
             }
 
             List<Path> subDirs = new ArrayList<>();
             List<Path> pngFiles = new ArrayList<>();
+            List<Path> disabledFiles = new ArrayList<>();
 
             try (Stream<Path> stream = Files.list(current)) {
                 stream.forEach(p -> {
@@ -513,6 +533,8 @@ public class FolderBrowserScreen extends Screen {
                             subDirs.add(p);
                         } else if (name.toLowerCase(Locale.ROOT).endsWith(".png")) {
                             pngFiles.add(p);
+                        } else if (name.toLowerCase(Locale.ROOT).endsWith(".disable")) {
+                            disabledFiles.add(p);
                         }
                     } catch (Exception ignored) {}
                 });
@@ -522,12 +544,17 @@ public class FolderBrowserScreen extends Screen {
 
             subDirs.sort((a, b) -> a.getFileName().toString().compareToIgnoreCase(b.getFileName().toString()));
             for (Path dir : subDirs) {
-                this.addEntry(new FileItemWidget(dir, dir.getFileName().toString(), true, false));
+                this.addEntry(new FileItemWidget(dir, dir.getFileName().toString(), true, false, false));
             }
 
             pngFiles.sort((a, b) -> a.getFileName().toString().compareToIgnoreCase(b.getFileName().toString()));
             for (Path file : pngFiles) {
-                this.addEntry(new FileItemWidget(file, file.getFileName().toString(), false, false));
+                this.addEntry(new FileItemWidget(file, file.getFileName().toString(), false, false, false));
+            }
+
+            disabledFiles.sort((a, b) -> a.getFileName().toString().compareToIgnoreCase(b.getFileName().toString()));
+            for (Path file : disabledFiles) {
+                this.addEntry(new FileItemWidget(file, file.getFileName().toString(), false, false, true));
             }
         }
 
@@ -541,14 +568,16 @@ public class FolderBrowserScreen extends Screen {
             private final String displayName;
             private final boolean isDirectory;
             private final boolean isParent;
+            private final boolean isDisabled;
             private final ButtonWidget actionButton;
             private final List<ClickableWidget> children = new ArrayList<>();
 
-            public FileItemWidget(Path path, String displayName, boolean isDirectory, boolean isParent) {
+            public FileItemWidget(Path path, String displayName, boolean isDirectory, boolean isParent, boolean isDisabled) {
                 this.path = path;
                 this.displayName = displayName;
                 this.isDirectory = isDirectory;
                 this.isParent = isParent;
+                this.isDisabled = isDisabled;
 
                 if (isParent) {
                     this.actionButton = ButtonWidget.builder(
@@ -559,6 +588,11 @@ public class FolderBrowserScreen extends Screen {
                     this.actionButton = ButtonWidget.builder(
                             Text.literal("Open"),
                             btn -> screen.navigateTo(path)
+                    ).dimensions(0, 0, 46, 20).build();
+                } else if (isDisabled) {
+                    this.actionButton = ButtonWidget.builder(
+                            Text.literal("Enable"),
+                            btn -> screen.enableDisabledImage(path)
                     ).dimensions(0, 0, 46, 20).build();
                 } else {
                     this.actionButton = ButtonWidget.builder(
@@ -591,6 +625,9 @@ public class FolderBrowserScreen extends Screen {
                 } else if (isDirectory) {
                     prefix = "§e[DIR] ";
                     prefixColor = 0xFFFFFF55;
+                } else if (isDisabled) {
+                    prefix = "§8[OFF] ";
+                    prefixColor = 0xFFAAAAAA;
                 } else {
                     prefix = "§b[IMG] ";
                     prefixColor = 0xFF55FFFF;

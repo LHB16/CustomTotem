@@ -30,6 +30,8 @@ public class TotemEntry {
     private transient NativeImageBackedTexture thumbnailTexture = null;
     private transient RenderLayer cachedRenderLayer = null;
     private transient RenderLayer cachedEmissiveRenderLayer = null;
+    // Actual VRAM consumed by the uploaded (possibly downscaled) full texture, 0 when unloaded
+    private transient float loadedVramMb = 0.0f;
 
     // High performance precomputed cache to ensure 0 GC allocations per frame
     private transient float[][] precomputedFrameUVs = null;
@@ -237,6 +239,18 @@ public class TotemEntry {
 
     public void setTexture(NativeImageBackedTexture texture) {
         this.texture = texture;
+        if (texture == null) {
+            this.loadedVramMb = 0.0f;
+        }
+    }
+
+    /** Records the real dimensions of the uploaded full texture for accurate VRAM budgeting. */
+    public void setLoadedTextureSize(int w, int h) {
+        this.loadedVramMb = (float) ((long) Math.max(0, w) * Math.max(0, h) * 4L) / (1024.0f * 1024.0f);
+    }
+
+    public float getLoadedVramMb() {
+        return isLoadedInRam() ? loadedVramMb : 0.0f;
     }
 
     public Identifier getThumbnailTextureId() {
@@ -264,6 +278,7 @@ public class TotemEntry {
             this.texture = null;
         }
         this.textureRegistered = false;
+        this.loadedVramMb = 0.0f;
         this.cachedRenderLayer = null;
         this.cachedEmissiveRenderLayer = null;
         invalidatePrecomputedCache();

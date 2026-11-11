@@ -4,6 +4,7 @@
   "version": "${version}",
   "name": "Custom Totem Manager",
   "description": "In-game dynamic totem manager and custom model renderer",
+  "icon": "assets/customtotem/icon.png",
   "authors": [
     "BinhLH"
   ],

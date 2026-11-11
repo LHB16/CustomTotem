@@ -44,6 +44,29 @@ public class TotemDisplaySettings {
     public TotemDisplaySettings() {
     }
 
+    public void copyFrom(TotemDisplaySettings other) {
+        if (other == null) return;
+        this.preset = other.preset;
+        this.fullbright = other.fullbright;
+        this.fpTranslationX = other.fpTranslationX;
+        this.fpTranslationY = other.fpTranslationY;
+        this.fpTranslationZ = other.fpTranslationZ;
+        this.fpScale = other.fpScale;
+        this.tpTranslationX = other.tpTranslationX;
+        this.tpTranslationY = other.tpTranslationY;
+        this.tpTranslationZ = other.tpTranslationZ;
+        this.tpScale = other.tpScale;
+        this.globalResolution = other.globalResolution;
+        this.globalAnimation = other.globalAnimation;
+        this.globalFps = other.globalFps;
+    }
+
+    public TotemDisplaySettings copy() {
+        TotemDisplaySettings clone = new TotemDisplaySettings();
+        clone.copyFrom(this);
+        return clone;
+    }
+
     public int getGlobalResolution() {
         return globalResolution;
     }

@@ -36,20 +36,62 @@ public class TotemManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final TotemManager INSTANCE = new TotemManager();
 
-    private static final int CPU_CORES = PlatformUtil.isAndroid() ? 1 : Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() / 2));
+    // Low-memory systems (<= ~2.5GB heap) decode sequentially to avoid 2 large atlases in RAM at once
+    private static final int CPU_CORES = (PlatformUtil.isAndroid() || Runtime.getRuntime().maxMemory() <= 2560L * 1024 * 1024)
+            ? 1 : Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() / 2));
     private static final ExecutorService ASYNC_POOL = Executors.newFixedThreadPool(CPU_CORES, r -> {
         Thread t = new Thread(r, "CustomTotem-DecodeWorker");
         t.setDaemon(true);
         return t;
     });
 
+    // Memory Budget System — prevents excessive VRAM/RAM usage on constrained systems
+    private static final long SYSTEM_MAX_HEAP = Runtime.getRuntime().maxMemory();
+    private static final boolean LOW_MEMORY_SYSTEM = SYSTEM_MAX_HEAP <= 2560L * 1024 * 1024; // <= ~2.5GB JVM heap
+    private static final float VRAM_BUDGET_MB = LOW_MEMORY_SYSTEM ? 64.0f : 192.0f;
+    private static final int PREFETCH_WINDOW = LOW_MEMORY_SYSTEM ? 1 : 2; // Number of next totems to prefetch
+
+    /** Max per-frame size used by the auto-clamp when no explicit resolution is configured. */
+    public static int getMaxAutoFrameSize() {
+        return LOW_MEMORY_SYSTEM ? 256 : 512;
+    }
+
     public static int getMaxSafeTextureSize() {
         if (PlatformUtil.isAndroid()) {
+            return 2048;
+        }
+        if (LOW_MEMORY_SYSTEM) {
+            // Constrained system (e.g. Intel iGPU, 8GB RAM with shared VRAM)
+            // Reduce atlas cap to 2048 to cut VRAM from 64MB to 16MB per atlas
             return 2048;
         }
         // Safe cap of 4096 ensures optimal performance, avoids severe memory bandwidth bottlenecks
         // on Intel integrated GPUs (reducing uncompressed texture RAM from 268MB down to 67MB per image).
         return 4096;
+    }
+
+    public static float getVramBudgetMb() {
+        return VRAM_BUDGET_MB;
+    }
+
+    /**
+     * Calculates total VRAM (in MB) currently consumed by all loaded totem textures.
+     */
+    public float getTotalLoadedVramMb() {
+        float total = 0;
+        for (TotemEntry entry : entries) {
+            if (entry.isLoadedInRam()) {
+                total += entry.getLoadedVramMb();
+            }
+        }
+        return total;
+    }
+
+    /**
+     * Returns true if loading one more totem would exceed the VRAM budget.
+     */
+    public boolean isOverVramBudget() {
+        return getTotalLoadedVramMb() >= VRAM_BUDGET_MB;
     }
 
     public record GridDetectionResult(int cols, int rows, int frameCount, int fps, int baseFps) {}
@@ -561,6 +603,9 @@ public class TotemManager {
                                 entry.setTextureId(textureId);
                                 entry.setTexture(texture);
                                 entry.setTextureRegistered(p.image() != null);
+                                if (p.image() != null) {
+                                    entry.setLoadedTextureSize(p.image().getWidth(), p.image().getHeight());
+                                }
                                 entry.setThumbnailTextureId(thumbId);
                                 entry.setThumbnailTexture(thumbTexture);
 
@@ -725,9 +770,9 @@ public class TotemManager {
 
                 // Auto-clamp if oversized (e.g. 15360x15360 or frame > 512)
                 if (targetRes <= 0) {
-                    if (width > maxSafeDim || height > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
-                        int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
-                        int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                    if (width > maxSafeDim || height > maxSafeDim || origFrameW > getMaxAutoFrameSize() || origFrameH > getMaxAutoFrameSize()) {
+                        int maxAllowedFrameW = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeCols);
+                        int maxAllowedFrameH = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeRows);
                         targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
                         if (targetRes < 16) targetRes = 16;
                     }
@@ -804,6 +849,7 @@ public class TotemManager {
                 client.getTextureManager().registerTexture(entry.getTextureId(), newTexture);
                 entry.setTexture(newTexture);
                 entry.setTextureRegistered(true);
+                entry.setLoadedTextureSize(finalImage.getWidth(), finalImage.getHeight());
 
                 // Update thumbnail texture
                 int curW = finalImage.getWidth();
@@ -873,9 +919,9 @@ public class TotemManager {
                 int origFrameH = image.getHeight() / safeRows;
 
                 if (targetRes <= 0) {
-                    if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
-                        int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
-                        int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                    if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > getMaxAutoFrameSize() || origFrameH > getMaxAutoFrameSize()) {
+                        int maxAllowedFrameW = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeCols);
+                        int maxAllowedFrameH = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeRows);
                         targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
                         if (targetRes < 16) targetRes = 16;
                     }
@@ -901,11 +947,14 @@ public class TotemManager {
                             return;
                         }
                         NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> "customtotem/" + entry.getId(), decodedImage);
+                        int decodedW = decodedImage.getWidth();
+                        int decodedH = decodedImage.getHeight();
                         if (client.getTextureManager() != null) {
                             client.getTextureManager().registerTexture(entry.getTextureId(), texture);
                         }
                         entry.setTexture(texture);
                         entry.setTextureRegistered(true);
+                        entry.setLoadedTextureSize(decodedW, decodedH);
                         LOGGER.info("Async registered full texture for totem: {}", entry.getFileName());
                         if (onComplete != null) onComplete.run();
                     } catch (Exception e) {
@@ -916,12 +965,87 @@ public class TotemManager {
         });
     }
 
+    /**
+     * Smart prefetch: only keeps the current/popping totem plus the next PREFETCH_WINDOW totems
+     * (SEQUENTIAL mode) in VRAM, instead of loading every enabled totem at once.
+     * Totems outside the window are evicted (thumbnail is kept) to cap memory usage.
+     */
     public void prefetchActiveTotemsAsync() {
-        List<TotemEntry> active = getActiveEntries();
-        for (TotemEntry entry : active) {
-            if (!entry.isTextureRegistered()) {
-                ensureTextureRegisteredAsync(entry, null);
+        Set<TotemEntry> keep = computeKeepSet();
+
+        // Evict textures outside the keep window first to free memory before loading new ones
+        evictTexturesOutside(keep);
+
+        if (mode != TotemMode.SEQUENTIAL) {
+            // RANDOM: next totem is unpredictable -> load on demand only (current is already in keep set)
+            TotemEntry cur = currentActiveTotem;
+            if (cur != null && !cur.isTextureRegistered()) {
+                ensureTextureRegisteredAsync(cur, null);
             }
+            return;
+        }
+
+        for (TotemEntry entry : keep) {
+            if (entry.isTextureRegistered()) continue;
+            // The current totem must always load; prefetched ones respect the VRAM budget
+            if (entry != currentActiveTotem && isOverVramBudget()) {
+                break;
+            }
+            ensureTextureRegisteredAsync(entry, null);
+        }
+    }
+
+    /**
+     * Builds the set of totems allowed to keep a full texture in VRAM:
+     * current, popping, and (SEQUENTIAL mode) the next PREFETCH_WINDOW active totems.
+     */
+    private synchronized Set<TotemEntry> computeKeepSet() {
+        Set<TotemEntry> keep = new LinkedHashSet<>();
+        TotemEntry cur = currentActiveTotem;
+        if (cur != null) keep.add(cur);
+        if (poppingTotem != null) keep.add(poppingTotem);
+
+        if (mode == TotemMode.SEQUENTIAL && cur != null) {
+            List<TotemEntry> active = new ArrayList<>(activeEntries);
+            int idx = active.indexOf(cur);
+            if (idx >= 0 && active.size() > 1) {
+                for (int i = 1; i <= PREFETCH_WINDOW && i < active.size(); i++) {
+                    keep.add(active.get((idx + i) % active.size()));
+                }
+            }
+        }
+        return keep;
+    }
+
+    /**
+     * Unloads full textures of totems not in the keep set. Skipped while a GUI screen is open
+     * so editing/preview screens are never disrupted; eviction resumes on the next pop.
+     */
+    private void evictTexturesOutside(Set<TotemEntry> keep) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) return;
+        Runnable task = () -> {
+            if (client.currentScreen != null || client.getTextureManager() == null) return;
+            boolean freed = false;
+            List<TotemEntry> snapshot;
+            synchronized (this) {
+                snapshot = new ArrayList<>(entries);
+            }
+            for (TotemEntry entry : snapshot) {
+                if (!keep.contains(entry) && entry.isLoadedInRam()) {
+                    entry.unloadTexture(client.getTextureManager());
+                    freed = true;
+                }
+            }
+            if (freed) {
+                LOGGER.info("Evicted out-of-window totem textures. VRAM in use: {} MB / budget {} MB",
+                        String.format("%.1f", getTotalLoadedVramMb()), String.format("%.0f", VRAM_BUDGET_MB));
+            }
+        };
+        if (client.isOnThread()) {
+            task.run();
+        } else {
+            client.execute(task);
         }
     }
 
@@ -977,8 +1101,11 @@ public class TotemManager {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.getTextureManager() == null) return;
         client.execute(() -> {
-            for (TotemEntry entry : entries) {
-                if (entry != currentActiveTotem && !entry.isEnabled() && entry.isLoadedInRam()) {
+            // Unload every full texture outside the keep window (disabled AND enabled-but-idle totems).
+            // Thumbnails are retained so GUI lists still render.
+            Set<TotemEntry> keep = computeKeepSet();
+            for (TotemEntry entry : new ArrayList<>(entries)) {
+                if (!keep.contains(entry) && entry.isLoadedInRam()) {
                     entry.unloadTexture(client.getTextureManager());
                 }
             }
@@ -1001,9 +1128,9 @@ public class TotemManager {
             int origFrameH = image.getHeight() / safeRows;
 
             if (targetRes <= 0) {
-                if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
-                    int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
-                    int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                if (image.getWidth() > maxSafeDim || image.getHeight() > maxSafeDim || origFrameW > getMaxAutoFrameSize() || origFrameH > getMaxAutoFrameSize()) {
+                    int maxAllowedFrameW = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeCols);
+                    int maxAllowedFrameH = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeRows);
                     targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
                     if (targetRes < 16) targetRes = 16;
                 }
@@ -1019,6 +1146,7 @@ public class TotemManager {
             }
             entry.setTexture(texture);
             entry.setTextureRegistered(true);
+            entry.setLoadedTextureSize(image.getWidth(), image.getHeight());
 
             if (entry.getThumbnailTextureId() == null || client.getTextureManager() == null || client.getTextureManager().getTexture(entry.getThumbnailTextureId()) == null) {
                 int curW = image.getWidth();
@@ -1112,9 +1240,9 @@ public class TotemManager {
             int maxSafeDim = getMaxSafeTextureSize();
 
             if (targetRes <= 0) {
-                if (width > maxSafeDim || height > maxSafeDim || origFrameW > 512 || origFrameH > 512) {
-                    int maxAllowedFrameW = Math.min(512, maxSafeDim / safeCols);
-                    int maxAllowedFrameH = Math.min(512, maxSafeDim / safeRows);
+                if (width > maxSafeDim || height > maxSafeDim || origFrameW > getMaxAutoFrameSize() || origFrameH > getMaxAutoFrameSize()) {
+                    int maxAllowedFrameW = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeCols);
+                    int maxAllowedFrameH = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeRows);
                     targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
                     if (targetRes < 16) targetRes = 16;
                 }
@@ -1162,6 +1290,7 @@ public class TotemManager {
             entry.setTextureId(textureId);
             entry.setTexture(texture);
             entry.setTextureRegistered(true);
+            entry.setLoadedTextureSize(image.getWidth(), image.getHeight());
             entry.setThumbnailTextureId(thumbId);
             entry.setThumbnailTexture(thumbTexture);
 
@@ -1181,16 +1310,26 @@ public class TotemManager {
         }
 
         Path activeDir = getImagesDir();
-        Path target = activeDir.resolve(fileName);
-        int counter = 1;
-        while (Files.exists(target)) {
-            String base = fileName.substring(0, fileName.length() - 4);
-            target = activeDir.resolve(base + "_" + counter + ".png");
-            counter++;
+        Path target;
+        if (sourceFile.getParent() != null && sourceFile.getParent().equals(activeDir)) {
+            target = sourceFile;
+        } else {
+            target = activeDir.resolve(fileName);
+            int counter = 1;
+            while (Files.exists(target)) {
+                String base = fileName.substring(0, fileName.length() - 4);
+                target = activeDir.resolve(base + "_" + counter + ".png");
+                counter++;
+            }
+            try {
+                Files.copy(sourceFile, target, StandardCopyOption.REPLACE_EXISTING);
+            } catch (Exception e) {
+                LOGGER.error("Failed to copy and add totem image: {}", sourceFile, e);
+                return null;
+            }
         }
 
         try {
-            Files.copy(sourceFile, target, StandardCopyOption.REPLACE_EXISTING);
             TotemEntry entry = loadSingleImage(target, null);
             if (entry != null) {
                 if (currentActiveTotem == null) {
@@ -1201,7 +1340,7 @@ public class TotemManager {
             }
             return entry;
         } catch (Exception e) {
-            LOGGER.error("Failed to copy and add totem image: {}", sourceFile, e);
+            LOGGER.error("Failed to load added totem image: {}", target, e);
             return null;
         }
     }
@@ -1222,9 +1361,19 @@ public class TotemManager {
 
         try {
             Path file = getImagesDir().resolve(entry.getFileName());
-            Files.deleteIfExists(file);
+            if (Files.exists(file)) {
+                String disabledName = entry.getFileName() + ".disable";
+                Path disabledFile = getImagesDir().resolve(disabledName);
+                int counter = 1;
+                while (Files.exists(disabledFile)) {
+                    disabledFile = getImagesDir().resolve(entry.getFileName() + "_" + counter + ".disable");
+                    counter++;
+                }
+                Files.move(file, disabledFile, StandardCopyOption.REPLACE_EXISTING);
+                LOGGER.info("Disabled totem file (renamed to .disable): {} -> {}", entry.getFileName(), disabledFile.getFileName());
+            }
         } catch (Exception e) {
-            LOGGER.error("Failed to delete totem file: {}", entry.getFileName(), e);
+            LOGGER.error("Failed to disable totem file: {}", entry.getFileName(), e);
         }
 
         entries.remove(entry);
@@ -1238,6 +1387,36 @@ public class TotemManager {
 
         updateActiveCache();
         saveConfig();
+    }
+
+    public synchronized boolean enableDisabledTotem(Path disabledFile) {
+        if (disabledFile == null || !Files.exists(disabledFile)) return false;
+        String name = disabledFile.getFileName().toString();
+        if (!name.toLowerCase(Locale.ROOT).endsWith(".disable")) return false;
+
+        String targetName = name.substring(0, name.length() - 8); // strip .disable
+        Path activeDir = getImagesDir();
+        Path targetFile = activeDir.resolve(targetName);
+        int counter = 1;
+        while (Files.exists(targetFile)) {
+            if (targetName.toLowerCase(Locale.ROOT).endsWith(".png")) {
+                String base = targetName.substring(0, targetName.length() - 4);
+                targetFile = activeDir.resolve(base + "_" + counter + ".png");
+            } else {
+                targetFile = activeDir.resolve(targetName + "_" + counter);
+            }
+            counter++;
+        }
+
+        try {
+            Files.move(disabledFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            TotemEntry entry = addTotem(targetFile);
+            LOGGER.info("Re-enabled totem file: {} -> {}", name, targetFile.getFileName());
+            return entry != null;
+        } catch (Exception e) {
+            LOGGER.error("Failed to re-enable totem file: {}", disabledFile, e);
+            return false;
+        }
     }
 
     public synchronized void setCurrentTotem(TotemEntry entry) {

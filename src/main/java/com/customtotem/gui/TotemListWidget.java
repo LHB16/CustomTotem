@@ -9,6 +9,7 @@ import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.Selectable;
+import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.gui.widget.ElementListWidget;
@@ -131,14 +132,16 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
                     }
             ).dimensions(0, 0, 20, 20).build();
 
-            // Delete button
+            // Delete / Disable button (renames file to .disable instead of deleting)
             this.deleteButton = ButtonWidget.builder(
                     Text.literal("§c✕"),
                     btn -> {
                         TotemManager.getInstance().removeTotem(entry);
                         screen.refreshList();
                     }
-            ).dimensions(0, 0, 20, 20).build();
+            ).dimensions(0, 0, 20, 20)
+            .tooltip(Tooltip.of(Text.literal("Disable totem (renames to .disable)")))
+            .build();
 
             this.children.add(toggleButton);
             this.children.add(selectButton);
