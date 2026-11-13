@@ -12,9 +12,7 @@ import java.util.List;
 
 public class DisplaySettingsScreen extends Screen {
     private final Screen parent;
-    private final TotemDisplaySettings originalSettings;
-    private final TotemDisplaySettings workingSettings;
-    private final int initialResolution;
+    private final TotemDisplaySettings settings;
     private ButtonWidget presetButton;
     private SettingsListWidget settingsList;
 
@@ -41,9 +39,7 @@ public class DisplaySettingsScreen extends Screen {
     public DisplaySettingsScreen(Screen parent) {
         super(Text.literal("Display Settings"));
         this.parent = parent;
-        this.originalSettings = TotemManager.getInstance().getDisplaySettings();
-        this.workingSettings = this.originalSettings.copy();
-        this.initialResolution = this.originalSettings.getGlobalResolution();
+        this.settings = TotemManager.getInstance().getDisplaySettings();
     }
 
     @Override
@@ -59,11 +55,12 @@ public class DisplaySettingsScreen extends Screen {
 
         // Preset button
         presetButton = ButtonWidget.builder(
-                Text.literal("Preset: " + workingSettings.getPreset().getDisplayName()),
+                Text.literal("Preset: " + settings.getPreset().getDisplayName()),
                 btn -> {
                     TotemDisplaySettings.Preset[] presets = TotemDisplaySettings.Preset.values();
-                    int nextIdx = (workingSettings.getPreset().ordinal() + 1) % presets.length;
-                    workingSettings.setPreset(presets[nextIdx]);
+                    int nextIdx = (settings.getPreset().ordinal() + 1) % presets.length;
+                    settings.setPreset(presets[nextIdx]);
+                    TotemManager.getInstance().saveConfig();
                     this.clearAndInit();
                 }
         ).dimensions(0, 0, 240, 20).build();
@@ -71,10 +68,11 @@ public class DisplaySettingsScreen extends Screen {
 
         // Fullbright toggle button
         ButtonWidget fullbrightBtn = ButtonWidget.builder(
-                Text.literal("Fullbright: " + (workingSettings.isFullbright() ? "§aON" : "§cOFF")),
+                Text.literal("Fullbright: " + (settings.isFullbright() ? "§aON" : "§cOFF")),
                 btn -> {
-                    workingSettings.setFullbright(!workingSettings.isFullbright());
-                    btn.setMessage(Text.literal("Fullbright: " + (workingSettings.isFullbright() ? "§aON" : "§cOFF")));
+                    settings.setFullbright(!settings.isFullbright());
+                    TotemManager.getInstance().saveConfig();
+                    btn.setMessage(Text.literal("Fullbright: " + (settings.isFullbright() ? "§aON" : "§cOFF")));
                 }
         ).dimensions(0, 0, 240, 20).build();
         this.settingsList.addWidget(fullbrightBtn);
@@ -107,9 +105,10 @@ public class DisplaySettingsScreen extends Screen {
         ButtonWidget globalAnimBtn = ButtonWidget.builder(
                 getGlobalAnimButtonMessage(),
                 btn -> {
-                    int current = workingSettings.getGlobalAnimation();
+                    int current = settings.getGlobalAnimation();
                     int next = (current + 1) % 3;
-                    workingSettings.setGlobalAnimation(next);
+                    settings.setGlobalAnimation(next);
+                    TotemManager.getInstance().saveConfig();
                     btn.setMessage(getGlobalAnimButtonMessage());
                 }
         ).dimensions(0, 0, 118, 20).build();
@@ -118,7 +117,7 @@ public class DisplaySettingsScreen extends Screen {
                 getGlobalFpsButtonMessage(),
                 btn -> {
                     int[] fpsOptions = {0, 15, 20, 30, 60};
-                    int current = workingSettings.getGlobalFps();
+                    int current = settings.getGlobalFps();
                     int nextIdx = 0;
                     for (int i = 0; i < fpsOptions.length; i++) {
                         if (fpsOptions[i] == current) {
@@ -126,7 +125,8 @@ public class DisplaySettingsScreen extends Screen {
                             break;
                         }
                     }
-                    workingSettings.setGlobalFps(fpsOptions[nextIdx]);
+                    settings.setGlobalFps(fpsOptions[nextIdx]);
+                    TotemManager.getInstance().saveConfig();
                     btn.setMessage(getGlobalFpsButtonMessage());
                 }
         ).dimensions(0, 0, 118, 20).build();
@@ -138,65 +138,68 @@ public class DisplaySettingsScreen extends Screen {
         // FP Scale slider: range 0.1f to 1.5f
         this.settingsList.addWidget(new SliderWidget(
                 0, 0, 240, 20,
-                Text.literal(String.format("FP Scale: %.2f", workingSettings.getFpScale())),
-                (workingSettings.getFpScale() - 0.1) / (1.5 - 0.1)
+                Text.literal(String.format("FP Scale: %.2f", settings.getFpScale())),
+                (settings.getFpScale() - 0.1) / (1.5 - 0.1)
         ) {
             @Override
             protected void updateMessage() {
-                setMessage(Text.literal(String.format("FP Scale: %.2f", workingSettings.getFpScale())));
+                setMessage(Text.literal(String.format("FP Scale: %.2f", settings.getFpScale())));
             }
 
             @Override
             protected void applyValue() {
                 float val = (float) (0.1 + this.value * (1.5 - 0.1));
-                workingSettings.setFpScale(Math.round(val * 100.0f) / 100.0f);
-                workingSettings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
+                settings.setFpScale(Math.round(val * 100.0f) / 100.0f);
+                settings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
                 if (presetButton != null) {
-                    presetButton.setMessage(Text.literal("Preset: " + workingSettings.getPreset().getDisplayName()));
+                    presetButton.setMessage(Text.literal("Preset: " + settings.getPreset().getDisplayName()));
                 }
+                TotemManager.getInstance().saveConfig();
             }
         });
 
         // FP Translation X & Y sliders (Side-by-side)
         SliderWidget fpTransX = new SliderWidget(
                 0, 0, 118, 20,
-                Text.literal(String.format("FP Offset X: %.2f", workingSettings.getFpTranslationX())),
-                (workingSettings.getFpTranslationX() - (-5.0)) / (5.0 - (-5.0))
+                Text.literal(String.format("FP Offset X: %.2f", settings.getFpTranslationX())),
+                (settings.getFpTranslationX() - (-5.0)) / (5.0 - (-5.0))
         ) {
             @Override
             protected void updateMessage() {
-                setMessage(Text.literal(String.format("FP Offset X: %.2f", workingSettings.getFpTranslationX())));
+                setMessage(Text.literal(String.format("FP Offset X: %.2f", settings.getFpTranslationX())));
             }
 
             @Override
             protected void applyValue() {
                 float val = (float) (-5.0 + this.value * 10.0);
-                workingSettings.setFpTranslationX(Math.round(val * 10.0f) / 10.0f);
-                workingSettings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
+                settings.setFpTranslationX(Math.round(val * 10.0f) / 10.0f);
+                settings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
                 if (presetButton != null) {
-                    presetButton.setMessage(Text.literal("Preset: " + workingSettings.getPreset().getDisplayName()));
+                    presetButton.setMessage(Text.literal("Preset: " + settings.getPreset().getDisplayName()));
                 }
+                TotemManager.getInstance().saveConfig();
             }
         };
 
         SliderWidget fpTransY = new SliderWidget(
                 0, 0, 118, 20,
-                Text.literal(String.format("FP Offset Y: %.2f", workingSettings.getFpTranslationY())),
-                (workingSettings.getFpTranslationY() - (-2.0)) / (8.0 - (-2.0))
+                Text.literal(String.format("FP Offset Y: %.2f", settings.getFpTranslationY())),
+                (settings.getFpTranslationY() - (-2.0)) / (8.0 - (-2.0))
         ) {
             @Override
             protected void updateMessage() {
-                setMessage(Text.literal(String.format("FP Offset Y: %.2f", workingSettings.getFpTranslationY())));
+                setMessage(Text.literal(String.format("FP Offset Y: %.2f", settings.getFpTranslationY())));
             }
 
             @Override
             protected void applyValue() {
                 float val = (float) (-2.0 + this.value * 10.0);
-                workingSettings.setFpTranslationY(Math.round(val * 10.0f) / 10.0f);
-                workingSettings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
+                settings.setFpTranslationY(Math.round(val * 10.0f) / 10.0f);
+                settings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
                 if (presetButton != null) {
-                    presetButton.setMessage(Text.literal("Preset: " + workingSettings.getPreset().getDisplayName()));
+                    presetButton.setMessage(Text.literal("Preset: " + settings.getPreset().getDisplayName()));
                 }
+                TotemManager.getInstance().saveConfig();
             }
         };
         this.settingsList.addWidgets(fpTransX, fpTransY);
@@ -206,43 +209,45 @@ public class DisplaySettingsScreen extends Screen {
 
         SliderWidget tpScale = new SliderWidget(
                 0, 0, 118, 20,
-                Text.literal(String.format("TP Scale: %.2f", workingSettings.getTpScale())),
-                (workingSettings.getTpScale() - 0.1) / (1.5 - 0.1)
+                Text.literal(String.format("TP Scale: %.2f", settings.getTpScale())),
+                (settings.getTpScale() - 0.1) / (1.5 - 0.1)
         ) {
             @Override
             protected void updateMessage() {
-                setMessage(Text.literal(String.format("TP Scale: %.2f", workingSettings.getTpScale())));
+                setMessage(Text.literal(String.format("TP Scale: %.2f", settings.getTpScale())));
             }
 
             @Override
             protected void applyValue() {
                 float val = (float) (0.1 + this.value * (1.5 - 0.1));
-                workingSettings.setTpScale(Math.round(val * 100.0f) / 100.0f);
-                workingSettings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
+                settings.setTpScale(Math.round(val * 100.0f) / 100.0f);
+                settings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
                 if (presetButton != null) {
-                    presetButton.setMessage(Text.literal("Preset: " + workingSettings.getPreset().getDisplayName()));
+                    presetButton.setMessage(Text.literal("Preset: " + settings.getPreset().getDisplayName()));
                 }
+                TotemManager.getInstance().saveConfig();
             }
         };
 
         SliderWidget tpTransY = new SliderWidget(
                 0, 0, 118, 20,
-                Text.literal(String.format("TP Offset Y: %.2f", workingSettings.getTpTranslationY())),
-                (workingSettings.getTpTranslationY() - (-2.0)) / (8.0 - (-2.0))
+                Text.literal(String.format("TP Offset Y: %.2f", settings.getTpTranslationY())),
+                (settings.getTpTranslationY() - (-2.0)) / (8.0 - (-2.0))
         ) {
             @Override
             protected void updateMessage() {
-                setMessage(Text.literal(String.format("TP Offset Y: %.2f", workingSettings.getTpTranslationY())));
+                setMessage(Text.literal(String.format("TP Offset Y: %.2f", settings.getTpTranslationY())));
             }
 
             @Override
             protected void applyValue() {
                 float val = (float) (-2.0 + this.value * 10.0);
-                workingSettings.setTpTranslationY(Math.round(val * 10.0f) / 10.0f);
-                workingSettings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
+                settings.setTpTranslationY(Math.round(val * 10.0f) / 10.0f);
+                settings.setPreset(TotemDisplaySettings.Preset.CUSTOM);
                 if (presetButton != null) {
-                    presetButton.setMessage(Text.literal("Preset: " + workingSettings.getPreset().getDisplayName()));
+                    presetButton.setMessage(Text.literal("Preset: " + settings.getPreset().getDisplayName()));
                 }
+                TotemManager.getInstance().saveConfig();
             }
         };
         this.settingsList.addWidgets(tpScale, tpTransY);
@@ -289,47 +294,42 @@ public class DisplaySettingsScreen extends Screen {
 
         // Fixed bottom buttons bar (ALWAYS reachable, never cut off!)
         int bottomY = this.height - 25;
-        int gap = 4;
-        int availableWidth = Math.min(this.width - 24, 380);
-        int resetW = Math.min(130, availableWidth * 40 / 100);
-        int remainingW = availableWidth - resetW - (gap * 2);
-        int halfW = remainingW / 2;
-        int startX = (this.width - availableWidth) / 2;
+        int btnW = Math.min(135, (this.width - 24) / 2);
+        int centerX = this.width / 2;
 
         // Reset to Mini Totem button
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Reset to Mini"),
+                Text.literal("Reset to Mini Totem"),
                 btn -> {
-                    workingSettings.setPreset(TotemDisplaySettings.Preset.MINI_TOTEM);
+                    settings.setPreset(TotemDisplaySettings.Preset.MINI_TOTEM);
+                    TotemManager.getInstance().saveConfig();
                     this.clearAndInit();
                 }
-        ).dimensions(startX, bottomY, resetW, 20).build());
+        ).dimensions(centerX - btnW - 3, bottomY, btnW, 20).build());
 
-        // Cancel button
+        // Back button
         this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Cancel"),
+                Text.literal("Back"),
                 btn -> this.close()
-        ).dimensions(startX + resetW + gap, bottomY, halfW, 20).build());
-
-        // Done button
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("§aDone"),
-                btn -> applyAndClose()
-        ).dimensions(startX + resetW + gap + halfW + gap, bottomY, remainingW - halfW, 20).build());
+        ).dimensions(centerX + 3, bottomY, btnW, 20).build());
     }
 
     private ButtonWidget createResButton(ResOption opt) {
         return ButtonWidget.builder(
                 getResButtonText(opt.resolution, opt.label),
                 btn -> {
-                    workingSettings.setGlobalResolution(opt.resolution);
-                    updateResButtons();
+                    if (settings.getGlobalResolution() != opt.resolution) {
+                        settings.setGlobalResolution(opt.resolution);
+                        TotemManager.getInstance().saveConfig();
+                        TotemManager.getInstance().applyGlobalResolution();
+                        updateResButtons();
+                    }
                 }
         ).dimensions(0, 0, 100, 20).build();
     }
 
     private Text getResButtonText(int res, String label) {
-        if (workingSettings.getGlobalResolution() == res) {
+        if (settings.getGlobalResolution() == res) {
             return Text.literal("§a✔ " + label);
         }
         return Text.literal("§7" + label);
@@ -343,18 +343,6 @@ public class DisplaySettingsScreen extends Screen {
         }
     }
 
-    private void applyAndClose() {
-        boolean resChanged = (initialResolution != workingSettings.getGlobalResolution());
-        originalSettings.copyFrom(workingSettings);
-        TotemManager.getInstance().saveConfig();
-        if (resChanged) {
-            TotemManager.getInstance().applyGlobalResolution();
-        }
-        if (this.client != null) {
-            this.client.setScreen(parent);
-        }
-    }
-
     @Override
     public void close() {
         if (this.client != null) {
@@ -363,14 +351,14 @@ public class DisplaySettingsScreen extends Screen {
     }
 
     private Text getGlobalAnimButtonMessage() {
-        int anim = workingSettings.getGlobalAnimation();
+        int anim = settings.getGlobalAnimation();
         if (anim == 1) return Text.literal("Global Anim: §bForce ON");
         if (anim == 2) return Text.literal("Global Anim: §cForce OFF");
         return Text.literal("Global Anim: §aDefault");
     }
 
     private Text getGlobalFpsButtonMessage() {
-        int fps = workingSettings.getGlobalFps();
+        int fps = settings.getGlobalFps();
         return fps <= 0 ? Text.literal("Global FPS: §aDefault") : Text.literal("Global FPS: §b" + fps + " FPS");
     }
 

@@ -8,7 +8,7 @@ import net.minecraft.util.Identifier;
 
 public class TotemEntry {
     private final String id;
-    private final String fileName;
+    private String fileName;
     private String displayName;
     private boolean enabled;
     private final int width;
@@ -30,12 +30,15 @@ public class TotemEntry {
     private transient NativeImageBackedTexture thumbnailTexture = null;
     private transient RenderLayer cachedRenderLayer = null;
     private transient RenderLayer cachedEmissiveRenderLayer = null;
+    private transient java.nio.file.Path binCachePath = null;
+    private transient com.customtotem.render.TotemPlayer activePlayer = null;
     // Actual VRAM consumed by the uploaded (possibly downscaled) full texture, 0 when unloaded
     private transient float loadedVramMb = 0.0f;
 
     // High performance precomputed cache to ensure 0 GC allocations per frame
     private transient float[][] precomputedFrameUVs = null;
     private transient float[] cachedQuadBounds = null;
+    private transient float[] cachedSingleFrameUVs = null;
     private transient CacheKey[] cachedKeys = null;
 
     public TotemEntry(String id, String fileName, String displayName, boolean enabled, int width, int height) {
@@ -70,6 +73,10 @@ public class TotemEntry {
 
     public String getFileName() {
         return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
     }
 
     public String getDisplayName() {
@@ -270,6 +277,7 @@ public class TotemEntry {
     }
 
     public void unloadTexture(TextureManager tm) {
+        closePlayer();
         if (this.textureId != null && tm != null) {
             tm.destroyTexture(this.textureId);
         }
@@ -319,6 +327,7 @@ public class TotemEntry {
     public void invalidatePrecomputedCache() {
         this.precomputedFrameUVs = null;
         this.cachedQuadBounds = null;
+        this.cachedSingleFrameUVs = null;
         this.cachedKeys = null;
     }
 
@@ -417,6 +426,25 @@ public class TotemEntry {
     }
 
     /**
+     * Returns precomputed single-frame UVs [u0, u1, v0, v1] with ZERO heap allocations
+     * for single-frame streaming or thumbnail textures.
+     */
+    public float[] getSingleFrameUVs() {
+        ensurePrecomputedCache();
+        return cachedSingleFrameUVs;
+    }
+
+    /**
+     * Returns the appropriate UVs [u0, u1, v0, v1] for the given texture ID.
+     */
+    public float[] getRenderUVsForTexture(Identifier texId, boolean isStreaming, long timeOrTick) {
+        if (isStreaming || (this.thumbnailTextureId != null && this.thumbnailTextureId.equals(texId))) {
+            return getSingleFrameUVs();
+        }
+        return getRenderUVs(timeOrTick);
+    }
+
+    /**
      * Calculates model quad bounds [x0, x1, y0, y1] with ZERO heap allocations during render.
      */
     public float[] getQuadBounds() {
@@ -425,13 +453,14 @@ public class TotemEntry {
     }
 
     private synchronized void ensurePrecomputedCache() {
-        if (precomputedFrameUVs == null || cachedQuadBounds == null) {
+        if (precomputedFrameUVs == null || cachedQuadBounds == null || cachedSingleFrameUVs == null) {
             TotemTextureTransform t = getTransform();
             int cols = Math.max(1, columns);
             int rws = Math.max(1, rows);
 
-            int frameW = (isEffectivelyAnimated()) ? width / cols : width;
-            int frameH = (isEffectivelyAnimated()) ? height / rws : height;
+            boolean isSpritesheet = frameCount > 1 || cols > 1 || rws > 1;
+            int frameW = isSpritesheet ? width / cols : width;
+            int frameH = isSpritesheet ? height / rws : height;
             float aspect = (float) frameW / (float) Math.max(1, frameH);
 
             float scale = t.getScale();
@@ -471,6 +500,8 @@ public class TotemEntry {
                 rawV0 = rawV1;
                 rawV1 = temp;
             }
+
+            cachedSingleFrameUVs = new float[]{rawU0, rawU1, rawV0, rawV1};
 
             // Precompute UVs for all frames
             precomputedFrameUVs = new float[frameCount][4];
@@ -566,7 +597,47 @@ public class TotemEntry {
             int frame
     ) {}
 
+    public void setBinCachePath(java.nio.file.Path binCachePath) {
+        this.binCachePath = binCachePath;
+    }
+
+    public java.nio.file.Path getBinCachePath() {
+        return binCachePath;
+    }
+
+    public com.customtotem.render.TotemPlayer getActivePlayer() {
+        return activePlayer;
+    }
+
+    public void closePlayer() {
+        if (this.activePlayer != null) {
+            this.activePlayer.close();
+            this.activePlayer = null;
+        }
+    }
+
+    public Identifier getStreamTextureId(long nowMs) {
+        if (this.binCachePath != null && java.nio.file.Files.exists(this.binCachePath)) {
+            if (this.activePlayer == null || this.activePlayer.isClosed()) {
+                try {
+                    this.activePlayer = new com.customtotem.render.TotemPlayer(this.id, this.binCachePath);
+                } catch (Exception e) {
+                    org.slf4j.LoggerFactory.getLogger("CustomTotem/Entry").error("Failed to initialize TotemPlayer for {}", this.id, e);
+                }
+            }
+            if (this.activePlayer != null) {
+                this.activePlayer.update(nowMs, isEffectivelyAnimated(), getEffectiveFps());
+                Identifier streamId = this.activePlayer.getTextureId();
+                if (streamId != null) {
+                    return streamId;
+                }
+            }
+        }
+        return this.textureId != null ? this.textureId : this.thumbnailTextureId;
+    }
+
     public void close() {
+        closePlayer();
         this.textureRegistered = false;
         this.cachedRenderLayer = null;
         this.cachedEmissiveRenderLayer = null;

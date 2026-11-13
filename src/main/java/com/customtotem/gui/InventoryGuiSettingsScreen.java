@@ -262,7 +262,7 @@ public class InventoryGuiSettingsScreen extends Screen {
                 Text.literal("File"),
                 btn -> {
                     if (this.client != null) {
-                        this.client.setScreen(new FolderBrowserScreen(this, TotemManager.getInstance().getInventoryGuiDir()));
+                        this.client.setScreen(new FolderBrowserScreen(this, TotemManager.getInstance().getInventoryGuiDir(), FolderBrowserScreen.BrowseTarget.INVENTORY_GUI));
                     }
                 }
         ).dimensions(0, 0, 48, 20).build();
@@ -324,9 +324,25 @@ public class InventoryGuiSettingsScreen extends Screen {
         }
     }
 
+    public void refreshImageSelection() {
+        TotemManager.getInstance().scanInventoryImages();
+        TotemManager.getInstance().loadInventoryGuiTexture();
+        if (selectImageButton != null) {
+            selectImageButton.setMessage(getImageButtonText());
+        }
+    }
+
     private void cycleImage(int direction) {
         List<String> list = TotemManager.getInstance().getAvailableInventoryImages();
-        if (list.isEmpty()) return;
+        if (list.isEmpty()) {
+            settings.setImageFileName("");
+            TotemManager.getInstance().loadInventoryGuiTexture();
+            TotemManager.getInstance().saveConfig();
+            if (selectImageButton != null) {
+                selectImageButton.setMessage(getImageButtonText());
+            }
+            return;
+        }
 
         int currentIndex = list.indexOf(settings.getImageFileName());
         int newIndex;
@@ -384,12 +400,12 @@ public class InventoryGuiSettingsScreen extends Screen {
     }
 
     private Text getImageButtonText() {
+        List<String> list = TotemManager.getInstance().getAvailableInventoryImages();
+        if (list.isEmpty()) {
+            return Text.literal("§7[No images]");
+        }
         String name = settings.getImageFileName();
-        if (name == null || name.trim().isEmpty()) {
-            List<String> list = TotemManager.getInstance().getAvailableInventoryImages();
-            if (list.isEmpty()) {
-                return Text.literal("§7[No images]");
-            }
+        if (name == null || name.trim().isEmpty() || !list.contains(name)) {
             return Text.literal("§eSelect image (" + list.size() + ")");
         }
         if (name.length() > 16) {

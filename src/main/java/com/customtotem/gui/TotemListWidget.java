@@ -2,7 +2,6 @@ package com.customtotem.gui;
 
 import com.customtotem.manager.TotemManager;
 import com.customtotem.model.TotemEntry;
-import com.customtotem.model.TotemTextureTransform;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.Click;
@@ -60,7 +59,6 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
         private final TotemEntry entry;
         private final ButtonWidget toggleButton;
         private final ButtonWidget selectButton;
-        private final ButtonWidget unloadButton;
         private final ButtonWidget editButton;
         private final ButtonWidget upButton;
         private final ButtonWidget downButton;
@@ -74,8 +72,8 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             this.toggleButton = ButtonWidget.builder(
                     Text.literal(entry.isEnabled() ? "§aActive" : "§7Off"),
                     btn -> {
-                        entry.setEnabled(!entry.isEnabled());
                         TotemManager.getInstance().onEntryToggle(entry);
+                        btn.setMessage(Text.literal(entry.isEnabled() ? "§aActive" : "§7Off"));
                         screen.refreshList();
                     }
             ).dimensions(0, 0, 44, 20).build();
@@ -92,17 +90,6 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             if (isCurrent) {
                 this.selectButton.active = false;
             }
-
-            // Unload texture from RAM button
-            boolean isLoaded = entry.isLoadedInRam();
-            this.unloadButton = ButtonWidget.builder(
-                    Text.literal("Unload"),
-                    btn -> {
-                        TotemManager.getInstance().unloadTotemTexture(entry);
-                        screen.refreshList();
-                    }
-            ).dimensions(0, 0, 44, 20).build();
-            this.unloadButton.active = isLoaded;
 
             // Edit / Adjust Canvas button
             this.editButton = ButtonWidget.builder(
@@ -145,7 +132,6 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
 
             this.children.add(toggleButton);
             this.children.add(selectButton);
-            this.children.add(unloadButton);
             this.children.add(editButton);
             this.children.add(upButton);
             this.children.add(downButton);
@@ -178,27 +164,24 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             context.fill(x, y + 1, x + 26, y + 27, 0xFF1E1E1E);
 
             // Draw Thumbnail: Use dedicated lightweight thumbnail by default; animate if current active totem
-            Identifier drawTex = (isCurrent && entry.isTextureRegistered() && entry.getTextureId() != null)
-                    ? entry.getTextureId()
-                    : entry.getThumbnailTextureId();
+            long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
+            Identifier drawTex = null;
+            boolean isStreaming = false;
+
+            if (isCurrent && entry.getBinCachePath() != null) {
+                drawTex = entry.getStreamTextureId(nowMs);
+                isStreaming = drawTex != null && drawTex.getPath().startsWith("stream_");
+            }
+            if (drawTex == null) {
+                drawTex = entry.getThumbnailTextureId();
+            }
 
             if (drawTex != null) {
-                float u0, u1, v0, v1;
-                if (drawTex == entry.getTextureId()) {
-                    long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
-                    float[] uvs = entry.getRenderUVs(nowMs);
-                    u0 = uvs[0];
-                    u1 = uvs[1];
-                    v0 = uvs[2];
-                    v1 = uvs[3];
-                } else {
-                    // Frame 0 thumbnail texture (128x128 max)
-                    TotemTextureTransform t = entry.getTransform();
-                    u0 = t.isFlipX() ? 1.0f : 0.0f;
-                    u1 = t.isFlipX() ? 0.0f : 1.0f;
-                    v0 = t.isFlipY() ? 1.0f : 0.0f;
-                    v1 = t.isFlipY() ? 0.0f : 1.0f;
-                }
+                float[] uvs = entry.getRenderUVsForTexture(drawTex, isStreaming, nowMs);
+                float u0 = uvs[0];
+                float u1 = uvs[1];
+                float v0 = uvs[2];
+                float v1 = uvs[3];
 
                 float[] bounds = entry.getQuadBounds();
                 float boxSize = 24.0f;
@@ -263,12 +246,6 @@ public class TotemListWidget extends ElementListWidget<TotemListWidget.TotemEntr
             editButton.setY(btnY);
             editButton.render(context, mouseX, mouseY, tickDelta);
             currentRight -= 23;
-
-            unloadButton.setX(currentRight - 44);
-            unloadButton.setY(btnY);
-            unloadButton.active = entry.isLoadedInRam();
-            unloadButton.render(context, mouseX, mouseY, tickDelta);
-            currentRight -= 47;
 
             selectButton.setX(currentRight - 50);
             selectButton.setY(btnY);

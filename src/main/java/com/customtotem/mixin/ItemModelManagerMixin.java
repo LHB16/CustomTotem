@@ -41,7 +41,7 @@ public class ItemModelManagerMixin {
 
             if (entry != null && entry.getTextureId() != null) {
                 if (!entry.isTextureRegistered()) {
-                    TotemManager.getInstance().ensureTextureRegistered(entry);
+                    TotemManager.getInstance().ensureTextureRegisteredAsync(entry, null);
                 }
                 renderState.clear();
                 ((ItemRenderStateAccessor) renderState).setDisplayContext(displayContext);

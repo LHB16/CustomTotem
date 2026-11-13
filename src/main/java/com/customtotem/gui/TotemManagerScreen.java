@@ -180,20 +180,12 @@ public class TotemManagerScreen extends Screen {
                 btn -> listWidget.scroll(96)
         ).dimensions(scrollBtnX, listY + listHeight - 22, 24, 20).build());
 
-        // Clean RAM and Done buttons on the bottom
-        int bottomBtnW = 90;
-        this.addDrawableChild(ButtonWidget.builder(
-                Text.literal("Clean RAM"),
-                btn -> {
-                    TotemManager.getInstance().unloadInactiveTotems();
-                    refreshList();
-                }
-        ).dimensions(this.width / 2 - bottomBtnW - 4, this.height - 25, bottomBtnW, 20).build());
-
+        // Done button on the bottom
+        int doneBtnW = 120;
         this.addDrawableChild(ButtonWidget.builder(
                 Text.literal("Done"),
                 btn -> this.close()
-        ).dimensions(this.width / 2 + 4, this.height - 25, bottomBtnW, 20).build());
+        ).dimensions(this.width / 2 - doneBtnW / 2, this.height - 25, doneBtnW, 20).build());
     }
 
     private Text getModeButtonText() {

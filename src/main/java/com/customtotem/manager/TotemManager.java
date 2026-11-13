@@ -1,5 +1,6 @@
 package com.customtotem.manager;
 
+import com.customtotem.baker.TotemBaker;
 import com.customtotem.config.TotemConfig;
 import com.customtotem.model.HandOutlineSettings;
 import com.customtotem.model.InventoryGuiSettings;
@@ -172,6 +173,7 @@ public class TotemManager {
     private final Path baseDir;
     private final Path defaultImagesDir;
     private final Path inventoryGuiDir;
+    private final Path cacheDir;
     private Path customImagesDir = null;
     private final Path configFile;
 
@@ -206,6 +208,7 @@ public class TotemManager {
             Path file,
             NativeImage image,
             NativeImage thumbImage,
+            Path binPath,
             int width,
             int height,
             String uniqueId,
@@ -227,11 +230,22 @@ public class TotemManager {
         this.baseDir = FabricLoader.getInstance().getConfigDir().resolve("custom_totems");
         this.defaultImagesDir = baseDir.resolve("images");
         this.inventoryGuiDir = baseDir.resolve("inventory");
+        this.cacheDir = baseDir.resolve("cache");
         this.configFile = baseDir.resolve("config.json");
     }
 
     public static TotemManager getInstance() {
         return INSTANCE;
+    }
+
+    public Path getCacheDir() {
+        Path c = getImagesDir().resolve(".cache");
+        try {
+            if (!Files.exists(c)) {
+                Files.createDirectories(c);
+            }
+        } catch (Exception ignored) {}
+        return c;
     }
 
     public void init() {
@@ -241,6 +255,9 @@ public class TotemManager {
             }
             if (!Files.exists(inventoryGuiDir)) {
                 Files.createDirectories(inventoryGuiDir);
+            }
+            if (!Files.exists(cacheDir)) {
+                Files.createDirectories(cacheDir);
             }
         } catch (Exception e) {
             LOGGER.error("Failed to create default custom totem directories", e);
@@ -479,6 +496,7 @@ public class TotemManager {
                             && existing.getLastModified() != 0
                             && existing.getLastModified() == lastMod
                             && existing.getFileSize() == size
+                            && (existing.getBinCachePath() == null || Files.exists(existing.getBinCachePath()))
                             && (!isTargetActive || existing.isTextureRegistered());
 
                     if (canReuse) {
@@ -598,16 +616,20 @@ public class TotemManager {
                                 if (p.transform() != null) {
                                     entry.setTransform(p.transform());
                                 }
+                                boolean hasBin = p.binPath() != null && Files.exists(p.binPath());
                                 entry.setLastModified(p.lastModified());
                                 entry.setFileSize(p.fileSize());
                                 entry.setTextureId(textureId);
                                 entry.setTexture(texture);
-                                entry.setTextureRegistered(p.image() != null);
+                                entry.setTextureRegistered(p.image() != null || hasBin);
                                 if (p.image() != null) {
                                     entry.setLoadedTextureSize(p.image().getWidth(), p.image().getHeight());
                                 }
                                 entry.setThumbnailTextureId(thumbId);
                                 entry.setThumbnailTexture(thumbTexture);
+                                if (p.binPath() != null) {
+                                    entry.setBinCachePath(p.binPath());
+                                }
 
                                 newlyCreated.put(p.fileName(), entry);
                             }
@@ -645,7 +667,7 @@ public class TotemManager {
 
                             this.poppingTotem = this.currentActiveTotem;
                             if (this.currentActiveTotem != null && !this.currentActiveTotem.isTextureRegistered()) {
-                                ensureTextureRegistered(this.currentActiveTotem);
+                                ensureTextureRegisteredAsync(this.currentActiveTotem, null);
                             }
                             updateActiveCache();
                             isReloading = false;
@@ -676,6 +698,35 @@ public class TotemManager {
         });
     }
 
+    public static int[] readImageDimensions(Path file) {
+        try (InputStream in = Files.newInputStream(file)) {
+            byte[] header = new byte[24];
+            int read = in.read(header);
+            // Check PNG signature: 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
+            if (read >= 24 && (header[0] & 0xFF) == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47) {
+                int width = ((header[16] & 0xFF) << 24) | ((header[17] & 0xFF) << 16) | ((header[18] & 0xFF) << 8) | (header[19] & 0xFF);
+                int height = ((header[20] & 0xFF) << 24) | ((header[21] & 0xFF) << 16) | ((header[22] & 0xFF) << 8) | (header[23] & 0xFF);
+                if (width > 0 && height > 0) {
+                    return new int[]{width, height};
+                }
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            Iterator<javax.imageio.ImageReader> readers = javax.imageio.ImageIO.getImageReadersByFormatName("png");
+            if (readers.hasNext()) {
+                javax.imageio.ImageReader reader = readers.next();
+                try (javax.imageio.stream.ImageInputStream iis = javax.imageio.ImageIO.createImageInputStream(file.toFile())) {
+                    reader.setInput(iis, true, true);
+                    return new int[]{reader.getWidth(0), reader.getHeight(0)};
+                } finally {
+                    reader.dispose();
+                }
+            }
+        } catch (Exception ignored) {}
+        return new int[]{0, 0};
+    }
+
     private PreloadedTotem decodeTotemFile(Path file, TotemConfig.TotemEntryConfig configEntry, int maxSafeDim, boolean loadFullImage) {
         try {
             String fileName = file.getFileName().toString();
@@ -689,13 +740,18 @@ public class TotemManager {
                     ? configEntry.id.replaceAll("[^a-zA-Z0-9_-]", "_").replaceAll("^_+", "").toLowerCase(Locale.ROOT)
                     : idName + "_" + System.currentTimeMillis();
 
-            NativeImage image;
-            try (InputStream in = Files.newInputStream(file)) {
-                image = NativeImage.read(in);
+            int[] dims = readImageDimensions(file);
+            int width = dims[0];
+            int height = dims[1];
+            if (width <= 0 || height <= 0) {
+                try (InputStream in = Files.newInputStream(file)) {
+                    try (NativeImage tmp = NativeImage.read(in)) {
+                        width = tmp.getWidth();
+                        height = tmp.getHeight();
+                    }
+                }
             }
 
-            int width = image.getWidth();
-            int height = image.getHeight();
             boolean enabled = configEntry == null || configEntry.enabled;
             String displayName = configEntry != null && configEntry.displayName != null ? configEntry.displayName : fileName;
 
@@ -722,7 +778,6 @@ public class TotemManager {
                     baseFps = configEntry.baseFps;
                 }
             } else {
-                // Use detected grid (also auto-heals corrupted frameCount <= 1 configs if detected.frameCount > 1)
                 cols = detected.cols();
                 rows = detected.rows();
                 frameCount = detected.frameCount();
@@ -746,41 +801,47 @@ public class TotemManager {
                 transform.setAnimated(true);
             }
 
-            int safeCols = Math.max(1, cols);
-            int safeRows = Math.max(1, rows);
+            NativeImage image = null;
+            NativeImage thumbImage = null;
+            Path binPath = null;
 
-            // Extract lightweight Frame 0 thumbnail (max 128x128)
-            int curW = image.getWidth();
-            int curH = image.getHeight();
-            int curFrameW = Math.max(1, curW / safeCols);
-            int curFrameH = Math.max(1, curH / safeRows);
-            int thumbW = Math.min(curFrameW, 128);
-            int thumbH = Math.min(curFrameH, 128);
-            NativeImage thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
-            image.resizeSubRectTo(0, 0, curFrameW, curFrameH, thumbImage);
-
-            if (!loadFullImage) {
-                // Lazy loading: free full image immediately to save memory and avoid software resampling overhead
-                image.close();
-                image = null;
-            } else {
-                int targetRes = (transform != null && transform.getResolution() > 0) ? transform.getResolution() : 0;
-                int origFrameW = width / safeCols;
-                int origFrameH = height / safeRows;
-
-                // Auto-clamp if oversized (e.g. 15360x15360 or frame > 512)
-                if (targetRes <= 0) {
-                    if (width > maxSafeDim || height > maxSafeDim || origFrameW > getMaxAutoFrameSize() || origFrameH > getMaxAutoFrameSize()) {
-                        int maxAllowedFrameW = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeCols);
-                        int maxAllowedFrameH = Math.min(getMaxAutoFrameSize(), maxSafeDim / safeRows);
-                        targetRes = Math.min(maxAllowedFrameW, maxAllowedFrameH);
-                        if (targetRes < 16) targetRes = 16;
+            if (frameCount > 1) {
+                // Animated Totem: Bake to .bin and stream via TotemPlayer without loading full image into RAM
+                TotemBaker.BakeResult bakeResult = TotemBaker.bake(file, getCacheDir(), cols, rows, frameCount, fps, null, null);
+                binPath = bakeResult.binPath();
+                if (Files.exists(bakeResult.thumbPath())) {
+                    try (InputStream in = Files.newInputStream(bakeResult.thumbPath())) {
+                        thumbImage = NativeImage.read(in);
                     }
                 }
-
-                if (targetRes > 0 && (origFrameW > targetRes || width > maxSafeDim || height > maxSafeDim)) {
-                    image = createResampledImage(image, cols, rows, targetRes);
+            } else {
+                // Static Totem (1 Frame)
+                if (loadFullImage) {
+                    try (InputStream in = Files.newInputStream(file)) {
+                        image = NativeImage.read(in);
+                    }
+                    int curW = image.getWidth();
+                    int curH = image.getHeight();
+                    int thumbW = Math.min(curW, 128);
+                    int thumbH = Math.min(curH, 128);
+                    thumbImage = new NativeImage(image.getFormat(), thumbW, thumbH, false);
+                    image.resizeSubRectTo(0, 0, curW, curH, thumbImage);
+                } else {
+                    try (InputStream in = Files.newInputStream(file)) {
+                        try (NativeImage fullImg = NativeImage.read(in)) {
+                            int curW = fullImg.getWidth();
+                            int curH = fullImg.getHeight();
+                            int thumbW = Math.min(curW, 128);
+                            int thumbH = Math.min(curH, 128);
+                            thumbImage = new NativeImage(fullImg.getFormat(), thumbW, thumbH, false);
+                            fullImg.resizeSubRectTo(0, 0, curW, curH, thumbImage);
+                        }
+                    }
                 }
+            }
+
+            if (thumbImage == null) {
+                thumbImage = new NativeImage(NativeImage.Format.RGBA, 16, 16, false);
             }
 
             long lastModified = 0;
@@ -791,7 +852,7 @@ public class TotemManager {
             } catch (Exception ignored) {}
 
             return new PreloadedTotem(
-                    file, image, thumbImage, width, height, uniqueId, fileName, displayName,
+                    file, image, thumbImage, binPath, width, height, uniqueId, fileName, displayName,
                     enabled, cols, rows, frameCount, frameTime, fps, baseFps, transform,
                     lastModified, fileSize
             );
@@ -878,8 +939,16 @@ public class TotemManager {
 
     private final Set<String> loadingTextureIds = Collections.synchronizedSet(new HashSet<>());
 
+    public static boolean hasValidBinCache(TotemEntry entry) {
+        return entry != null && entry.getBinCachePath() != null && Files.exists(entry.getBinCachePath());
+    }
+
     public void ensureTextureRegistered(TotemEntry entry) {
         if (entry == null || entry.getTextureId() == null || entry.isTextureRegistered()) {
+            return;
+        }
+        if (hasValidBinCache(entry)) {
+            entry.setTextureRegistered(true);
             return;
         }
         MinecraftClient client = MinecraftClient.getInstance();
@@ -894,6 +963,11 @@ public class TotemManager {
 
     public void ensureTextureRegisteredAsync(TotemEntry entry, Runnable onComplete) {
         if (entry == null || entry.getTextureId() == null || entry.isTextureRegistered()) {
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+        if (hasValidBinCache(entry)) {
+            entry.setTextureRegistered(true);
             if (onComplete != null) onComplete.run();
             return;
         }
@@ -1359,21 +1433,25 @@ public class TotemManager {
         }
         entry.close();
 
+        // Nút X: XÓA HẲN FILE TRÊN Ổ CỨNG
         try {
             Path file = getImagesDir().resolve(entry.getFileName());
-            if (Files.exists(file)) {
-                String disabledName = entry.getFileName() + ".disable";
-                Path disabledFile = getImagesDir().resolve(disabledName);
-                int counter = 1;
-                while (Files.exists(disabledFile)) {
-                    disabledFile = getImagesDir().resolve(entry.getFileName() + "_" + counter + ".disable");
-                    counter++;
-                }
-                Files.move(file, disabledFile, StandardCopyOption.REPLACE_EXISTING);
-                LOGGER.info("Disabled totem file (renamed to .disable): {} -> {}", entry.getFileName(), disabledFile.getFileName());
-            }
+            Files.deleteIfExists(file);
+            LOGGER.info("Permanently deleted totem file: {}", file);
         } catch (Exception e) {
-            LOGGER.error("Failed to disable totem file: {}", entry.getFileName(), e);
+            LOGGER.error("Failed to delete totem file: {}", entry.getFileName(), e);
+        }
+
+        // Xóa file cache (.bin và .thumb.png trong .cache/)
+        if (entry.getBinCachePath() != null) {
+            try {
+                Files.deleteIfExists(entry.getBinCachePath());
+                String binStr = entry.getBinCachePath().toString();
+                if (binStr.endsWith(".bin")) {
+                    Path thumb = java.nio.file.Paths.get(binStr.substring(0, binStr.length() - 4) + ".thumb.png");
+                    Files.deleteIfExists(thumb);
+                }
+            } catch (Exception ignored) {}
         }
 
         entries.remove(entry);
@@ -1409,10 +1487,10 @@ public class TotemManager {
         }
 
         try {
+            // Chỉ đổi tên file trên đĩa, không load lên ngay
             Files.move(disabledFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
-            TotemEntry entry = addTotem(targetFile);
-            LOGGER.info("Re-enabled totem file: {} -> {}", name, targetFile.getFileName());
-            return entry != null;
+            LOGGER.info("Re-enabled totem file (renamed to .png only, not loaded immediately): {} -> {}", name, targetFile.getFileName());
+            return true;
         } catch (Exception e) {
             LOGGER.error("Failed to re-enable totem file: {}", disabledFile, e);
             return false;
@@ -1420,22 +1498,66 @@ public class TotemManager {
     }
 
     public synchronized void setCurrentTotem(TotemEntry entry) {
+        if (this.currentActiveTotem != null && this.currentActiveTotem != entry) {
+            this.currentActiveTotem.closePlayer();
+        }
         if (entry != null) {
             entry.setEnabled(true);
             this.currentActiveTotem = entry;
             this.poppingTotem = entry;
-            ensureTextureRegistered(entry);
+            ensureTextureRegisteredAsync(entry, null);
             updateActiveCache();
             saveConfig();
+            if (mode != TotemMode.SINGLE) {
+                prefetchActiveTotemsAsync();
+            }
         }
     }
 
     public synchronized void onEntryToggle(TotemEntry entry) {
-        if (!entry.isEnabled()) {
+        boolean newState = !entry.isEnabled();
+        entry.setEnabled(newState);
+
+        Path dir = getImagesDir();
+        Path currentFile = dir.resolve(entry.getFileName());
+
+        if (!newState) {
+            // Chọn OFF -> đổi tên file thành .disable
+            try {
+                if (Files.exists(currentFile)) {
+                    String disabledName = entry.getFileName() + ".disable";
+                    Path target = dir.resolve(disabledName);
+                    int counter = 1;
+                    while (Files.exists(target)) {
+                        target = dir.resolve(entry.getFileName() + "_" + counter + ".disable");
+                        counter++;
+                    }
+                    Files.move(currentFile, target, StandardCopyOption.REPLACE_EXISTING);
+                    entry.setFileName(target.getFileName().toString());
+                    LOGGER.info("Toggled OFF totem: renamed {} to {}", entry.getFileName(), target.getFileName());
+                }
+            } catch (Exception e) {
+                LOGGER.error("Failed to rename toggled OFF totem {}", entry.getFileName(), e);
+            }
             unloadTotemTexture(entry);
         } else {
+            // Chọn ACTIVE -> nếu file đang có đuôi .disable thì đổi lại .png
+            if (entry.getFileName().toLowerCase(Locale.ROOT).endsWith(".disable")) {
+                try {
+                    if (Files.exists(currentFile)) {
+                        String enabledName = entry.getFileName().substring(0, entry.getFileName().length() - 8);
+                        Path target = dir.resolve(enabledName);
+                        Files.move(currentFile, target, StandardCopyOption.REPLACE_EXISTING);
+                        entry.setFileName(target.getFileName().toString());
+                        LOGGER.info("Toggled ACTIVE totem: renamed {} to {}", entry.getFileName(), target.getFileName());
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("Failed to rename toggled ACTIVE totem {}", entry.getFileName(), e);
+                }
+            }
             ensureTextureRegisteredAsync(entry, null);
         }
+
         updateActiveCache();
         saveConfig();
         List<TotemEntry> active = getActiveEntries();
@@ -1473,6 +1595,8 @@ public class TotemManager {
             return;
         }
 
+        TotemEntry prevActive = this.currentActiveTotem;
+
         if (mode == TotemMode.SINGLE) {
             return;
         } else if (mode == TotemMode.SEQUENTIAL) {
@@ -1492,6 +1616,9 @@ public class TotemManager {
                 }
                 this.currentActiveTotem = candidates.get(random.nextInt(candidates.size()));
             }
+        }
+        if (prevActive != null && prevActive != this.currentActiveTotem) {
+            prevActive.closePlayer();
         }
         if (this.currentActiveTotem != null && !this.currentActiveTotem.isTextureRegistered()) {
             ensureTextureRegisteredAsync(this.currentActiveTotem, null);
@@ -1656,18 +1783,31 @@ public class TotemManager {
                         .map(p -> p.getFileName().toString())
                         .forEach(availableInventoryImages::add);
             }
-            Path activeImages = getImagesDir();
-            if (activeImages != null && Files.exists(activeImages) && !activeImages.equals(inventoryGuiDir)) {
-                try (Stream<Path> stream = Files.list(activeImages)) {
-                    stream.filter(Files::isRegularFile)
-                            .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png"))
-                            .map(p -> p.getFileName().toString())
-                            .filter(name -> !availableInventoryImages.contains(name))
-                            .forEach(availableInventoryImages::add);
-                }
-            }
+            availableInventoryImages.sort(String.CASE_INSENSITIVE_ORDER);
         } catch (Exception e) {
             LOGGER.error("Failed to scan inventory GUI images", e);
+        }
+    }
+
+    public synchronized boolean importInventoryImage(Path sourceFile) {
+        if (sourceFile == null || !Files.exists(sourceFile) || Files.isDirectory(sourceFile)) {
+            return false;
+        }
+        try {
+            if (!Files.exists(inventoryGuiDir)) {
+                Files.createDirectories(inventoryGuiDir);
+            }
+            String fileName = sourceFile.getFileName().toString();
+            Path target = inventoryGuiDir.resolve(fileName);
+            if (!sourceFile.toAbsolutePath().normalize().equals(target.toAbsolutePath().normalize())) {
+                Files.copy(sourceFile, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            scanInventoryImages();
+            setInventoryGuiImage(fileName);
+            return true;
+        } catch (Exception e) {
+            LOGGER.error("Failed to import inventory GUI image from: {}", sourceFile, e);
+            return false;
         }
     }
 
@@ -1698,10 +1838,7 @@ public class TotemManager {
 
         Path imgPath = inventoryGuiDir.resolve(fileName);
         if (!Files.exists(imgPath)) {
-            imgPath = getImagesDir().resolve(fileName);
-        }
-        if (!Files.exists(imgPath)) {
-            LOGGER.warn("Inventory GUI image file not found: {}", fileName);
+            LOGGER.warn("Inventory GUI image file not found in inventory dir: {}", fileName);
             this.inventoryGuiImageWidth = 0;
             this.inventoryGuiImageHeight = 0;
             return;

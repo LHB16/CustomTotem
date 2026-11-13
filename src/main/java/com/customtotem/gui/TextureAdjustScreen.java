@@ -118,7 +118,7 @@ public class TextureAdjustScreen extends Screen {
 
     @Override
     protected void init() {
-        TotemManager.getInstance().ensureTextureRegistered(entry);
+        TotemManager.getInstance().ensureTextureRegisteredAsync(entry, null);
         isSideBySide = this.width >= 350;
 
         int listX;
@@ -384,7 +384,14 @@ public class TextureAdjustScreen extends Screen {
         context.fill(previewX, previewY, previewX + boxSize, previewY + boxSize, 0xFF141414);
 
         // Draw Totem Texture inside preview box
-        Identifier drawTex = entry.isTextureRegistered() ? entry.getTextureId() : entry.getThumbnailTextureId();
+        long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
+        Identifier streamTex = entry.getStreamTextureId(nowMs);
+        boolean isStreaming = streamTex != null && streamTex.getPath().startsWith("stream_");
+        boolean hasFullAtlas = entry.isTextureRegistered() && entry.getTexture() != null;
+        Identifier drawTex = (isStreaming || hasFullAtlas)
+                ? (streamTex != null ? streamTex : entry.getThumbnailTextureId())
+                : (entry.getThumbnailTexture() != null ? entry.getThumbnailTextureId() : null);
+
         if (drawTex != null) {
             float[] bounds = entry.getQuadBounds();
             int qx1 = (int) (previewX + bounds[0] * boxSize);
@@ -392,21 +399,11 @@ public class TextureAdjustScreen extends Screen {
             int qy1 = (int) (previewY + (1.0f - bounds[3]) * boxSize);
             int qy2 = (int) (previewY + (1.0f - bounds[2]) * boxSize);
 
-            float u0, u1, v0, v1;
-            if (entry.isTextureRegistered()) {
-                long nowMs = net.minecraft.util.Util.getMeasuringTimeMs();
-                float[] uvs = entry.getRenderUVs(nowMs);
-                u0 = uvs[0];
-                u1 = uvs[1];
-                v0 = uvs[2];
-                v1 = uvs[3];
-            } else {
-                TotemTextureTransform t = entry.getTransform();
-                u0 = t.isFlipX() ? 1.0f : 0.0f;
-                u1 = t.isFlipX() ? 0.0f : 1.0f;
-                v0 = t.isFlipY() ? 1.0f : 0.0f;
-                v1 = t.isFlipY() ? 0.0f : 1.0f;
-            }
+            float[] uvs = entry.getRenderUVsForTexture(drawTex, isStreaming, nowMs);
+            float u0 = uvs[0];
+            float u1 = uvs[1];
+            float v0 = uvs[2];
+            float v1 = uvs[3];
 
             context.enableScissor(previewX, previewY, previewX + boxSize, previewY + boxSize);
             context.drawTexturedQuad(drawTex, qx1, qy1, qx2, qy2, u0, u1, v0, v1);

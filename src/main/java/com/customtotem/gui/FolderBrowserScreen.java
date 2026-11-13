@@ -32,7 +32,13 @@ import java.util.stream.Stream;
 public class FolderBrowserScreen extends Screen {
     private static final Logger LOGGER = LoggerFactory.getLogger("CustomTotemMod");
 
+    public enum BrowseTarget {
+        TOTEM,
+        INVENTORY_GUI
+    }
+
     private final Screen parent;
+    private final BrowseTarget browseTarget;
     private Path currentDirectory;
     private TextFieldWidget pathField;
     private FileListWidget fileListWidget;
@@ -42,14 +48,26 @@ public class FolderBrowserScreen extends Screen {
     private long statusExpireTime = 0;
 
     public FolderBrowserScreen(Screen parent) {
-        this(parent, null);
+        this(parent, null, BrowseTarget.TOTEM);
     }
 
     public FolderBrowserScreen(Screen parent, Path initialDir) {
-        super(Text.literal("Totem File & Folder Browser"));
+        this(parent, initialDir, (parent instanceof InventoryGuiSettingsScreen) ? BrowseTarget.INVENTORY_GUI : BrowseTarget.TOTEM);
+    }
+
+    public FolderBrowserScreen(Screen parent, Path initialDir, BrowseTarget browseTarget) {
+        super(Text.literal(browseTarget == BrowseTarget.INVENTORY_GUI ? "Inventory Background Browser" : "Totem File & Folder Browser"));
         this.parent = parent;
+        this.browseTarget = browseTarget != null ? browseTarget : BrowseTarget.TOTEM;
         if (initialDir != null && Files.exists(initialDir)) {
             this.currentDirectory = initialDir.toAbsolutePath().normalize();
+        } else if (this.browseTarget == BrowseTarget.INVENTORY_GUI) {
+            Path invDir = TotemManager.getInstance().getInventoryGuiDir();
+            if (invDir != null && Files.exists(invDir)) {
+                this.currentDirectory = invDir.toAbsolutePath().normalize();
+            } else {
+                this.currentDirectory = FabricLoader.getInstance().getGameDir().toAbsolutePath().normalize();
+            }
         } else {
             Path initial = TotemManager.getInstance().getImagesDir();
             if (initial != null && Files.exists(initial)) {
@@ -58,6 +76,10 @@ public class FolderBrowserScreen extends Screen {
                 this.currentDirectory = FabricLoader.getInstance().getGameDir().toAbsolutePath().normalize();
             }
         }
+    }
+
+    public BrowseTarget getBrowseTarget() {
+        return browseTarget;
     }
 
     @Override
@@ -139,26 +161,23 @@ public class FolderBrowserScreen extends Screen {
             int row2Y = this.height - 25;
             int btnSpacing = 4;
 
-            // Row 1: 3 buttons (Select Folder, Download, Web Server)
+            // Row 1: 3 buttons (Select/Import Folder, Download, Web Server)
             int btn3W = (this.width - 20 - (btnSpacing * 2)) / 3;
             int startX1 = (this.width - ((btn3W * 3) + (btnSpacing * 2))) / 2;
 
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Select Folder"),
-                    btn -> {
-                        TotemManager.getInstance().setCustomImagesDir(this.currentDirectory);
-                        if (this.parent instanceof TotemManagerScreen tms) {
-                            tms.refreshList();
-                        }
-                        this.close();
-                    }
+                    Text.literal(browseTarget == BrowseTarget.INVENTORY_GUI ? "Import Dir" : "Select Folder"),
+                    btn -> handleSelectFolder()
             ).dimensions(startX1, row1Y, btn3W, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
                     Text.literal("Download"),
                     btn -> {
                         if (this.client != null) {
-                            this.client.setScreen(new DownloadUrlScreen(this));
+                            DownloadUrlScreen.TargetType target = (browseTarget == BrowseTarget.INVENTORY_GUI)
+                                    ? DownloadUrlScreen.TargetType.INVENTORY_GUI
+                                    : DownloadUrlScreen.TargetType.TOTEM;
+                            this.client.setScreen(new DownloadUrlScreen(this, target));
                         }
                     }
             ).dimensions(startX1 + btn3W + btnSpacing, row1Y, btn3W, 20).build());
@@ -178,13 +197,7 @@ public class FolderBrowserScreen extends Screen {
 
             this.addDrawableChild(ButtonWidget.builder(
                     Text.literal("Default"),
-                    btn -> {
-                        TotemManager.getInstance().setCustomImagesDir(null);
-                        if (this.parent instanceof TotemManagerScreen tms) {
-                            tms.refreshList();
-                        }
-                        this.close();
-                    }
+                    btn -> handleDefaultFolder()
             ).dimensions(startX2, row2Y, btn2W, 20).build());
 
             this.addDrawableChild(ButtonWidget.builder(
@@ -203,16 +216,10 @@ public class FolderBrowserScreen extends Screen {
             int bStartX = (this.width - totalBottomWidth) / 2;
             int bY = this.height - 25;
 
-            // Button 1: Set as Totem Folder
+            // Button 1: Set as Totem Folder or Import Folder for Inventory
             this.addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Select Folder"),
-                    btn -> {
-                        TotemManager.getInstance().setCustomImagesDir(this.currentDirectory);
-                        if (this.parent instanceof TotemManagerScreen tms) {
-                            tms.refreshList();
-                        }
-                        this.close();
-                    }
+                    Text.literal(browseTarget == BrowseTarget.INVENTORY_GUI ? "Import Dir" : "Select Folder"),
+                    btn -> handleSelectFolder()
             ).dimensions(bStartX, bY, btnWidth, 20).build());
 
             // Button 2: Download by Link URL
@@ -220,7 +227,10 @@ public class FolderBrowserScreen extends Screen {
                     Text.literal("Download"),
                     btn -> {
                         if (this.client != null) {
-                            this.client.setScreen(new DownloadUrlScreen(this));
+                            DownloadUrlScreen.TargetType target = (browseTarget == BrowseTarget.INVENTORY_GUI)
+                                    ? DownloadUrlScreen.TargetType.INVENTORY_GUI
+                                    : DownloadUrlScreen.TargetType.TOTEM;
+                            this.client.setScreen(new DownloadUrlScreen(this, target));
                         }
                     }
             ).dimensions(bStartX + (btnWidth + btnSpacing), bY, btnWidth, 20).build());
@@ -235,16 +245,10 @@ public class FolderBrowserScreen extends Screen {
                     }
             ).dimensions(bStartX + (btnWidth + btnSpacing) * 2, bY, btnWidth, 20).build());
 
-            // Button 4: Reset to Mod Default Folder
+            // Button 4: Reset to Default Folder
             this.addDrawableChild(ButtonWidget.builder(
                     Text.literal("Default"),
-                    btn -> {
-                        TotemManager.getInstance().setCustomImagesDir(null);
-                        if (this.parent instanceof TotemManagerScreen tms) {
-                            tms.refreshList();
-                        }
-                        this.close();
-                    }
+                    btn -> handleDefaultFolder()
             ).dimensions(bStartX + (btnWidth + btnSpacing) * 3, bY, btnWidth, 20).build());
 
             // Button 5: Back
@@ -252,6 +256,62 @@ public class FolderBrowserScreen extends Screen {
                     Text.literal("Back"),
                     btn -> this.close()
             ).dimensions(bStartX + (btnWidth + btnSpacing) * 4, bY, btnWidth, 20).build());
+        }
+    }
+
+    private void handleSelectFolder() {
+        if (browseTarget == BrowseTarget.INVENTORY_GUI) {
+            importAllImagesFromCurrentDir();
+        } else {
+            TotemManager.getInstance().setCustomImagesDir(this.currentDirectory);
+            if (this.parent instanceof TotemManagerScreen tms) {
+                tms.refreshList();
+            }
+            this.close();
+        }
+    }
+
+    private void handleDefaultFolder() {
+        if (browseTarget == BrowseTarget.INVENTORY_GUI) {
+            Path invDir = TotemManager.getInstance().getInventoryGuiDir();
+            if (invDir != null && Files.exists(invDir)) {
+                navigateTo(invDir);
+            }
+            setStatus("§aNavigated to default inventory folder", false);
+        } else {
+            TotemManager.getInstance().setCustomImagesDir(null);
+            if (this.parent instanceof TotemManagerScreen tms) {
+                tms.refreshList();
+            }
+            this.close();
+        }
+    }
+
+    public void importAllImagesFromCurrentDir() {
+        if (currentDirectory == null || !Files.exists(currentDirectory)) return;
+        try {
+            int count = 0;
+            try (Stream<Path> stream = Files.list(currentDirectory)) {
+                List<Path> pngs = stream.filter(Files::isRegularFile)
+                        .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png"))
+                        .toList();
+                for (Path p : pngs) {
+                    if (TotemManager.getInstance().importInventoryImage(p)) {
+                        count++;
+                    }
+                }
+            }
+            if (count > 0) {
+                setStatus("§aImported " + count + " image(s) to inventory!", false);
+                if (this.parent instanceof InventoryGuiSettingsScreen igss) {
+                    igss.refreshImageSelection();
+                }
+            } else {
+                setStatus("§cNo .png images found in this folder.", true);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to import images from folder", e);
+            setStatus("§cError: " + e.getMessage(), true);
         }
     }
 
@@ -295,6 +355,10 @@ public class FolderBrowserScreen extends Screen {
     }
 
     public void importImage(Path file) {
+        if (browseTarget == BrowseTarget.INVENTORY_GUI) {
+            selectInventoryImage(file);
+            return;
+        }
         try {
             TotemEntry entry = TotemManager.getInstance().addTotem(file);
             if (entry != null) {
@@ -307,6 +371,23 @@ public class FolderBrowserScreen extends Screen {
             }
         } catch (Exception e) {
             setStatus("§cError adding image: " + e.getMessage(), true);
+        }
+    }
+
+    public void selectInventoryImage(Path file) {
+        try {
+            boolean success = TotemManager.getInstance().importInventoryImage(file);
+            if (success) {
+                setStatus("§aSelected inventory background: " + file.getFileName().toString(), false);
+                if (this.parent instanceof InventoryGuiSettingsScreen igss) {
+                    igss.refreshImageSelection();
+                }
+            } else {
+                setStatus("§cCould not load: " + file.getFileName().toString(), true);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error setting inventory image", e);
+            setStatus("§cError: " + e.getMessage(), true);
         }
     }
 
@@ -363,6 +444,18 @@ public class FolderBrowserScreen extends Screen {
         // Status or Active Folder display above bottom buttons
         if (System.currentTimeMillis() < statusExpireTime && !statusMessage.isEmpty()) {
             context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(statusMessage), this.width / 2, this.height - 42, statusColor);
+        } else if (browseTarget == BrowseTarget.INVENTORY_GUI) {
+            String cur = TotemManager.getInstance().getInventoryGuiSettings().getImageFileName();
+            if (cur == null || cur.trim().isEmpty()) {
+                cur = "None";
+            }
+            context.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("§7Current inventory background: §e" + cur),
+                    this.width / 2,
+                    this.height - 42,
+                    0xFFAAAAAA
+            );
         } else {
             Path active = TotemManager.getInstance().getImagesDir();
             String activeStr = active != null ? active.toString() : "Default";
@@ -595,8 +688,9 @@ public class FolderBrowserScreen extends Screen {
                             btn -> screen.enableDisabledImage(path)
                     ).dimensions(0, 0, 46, 20).build();
                 } else {
+                    String btnText = (screen.getBrowseTarget() == BrowseTarget.INVENTORY_GUI) ? "Select" : "Add";
                     this.actionButton = ButtonWidget.builder(
-                            Text.literal("Add"),
+                            Text.literal(btnText),
                             btn -> screen.importImage(path)
                     ).dimensions(0, 0, 46, 20).build();
                 }

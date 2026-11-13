@@ -2,7 +2,6 @@ package com.customtotem.render;
 
 import com.customtotem.manager.TotemManager;
 import com.customtotem.model.TotemEntry;
-import com.customtotem.model.TotemTextureTransform;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.render.VertexConsumer;
@@ -30,38 +29,35 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
         if (entry == null) {
             entry = TotemManager.getInstance().getCurrentActiveTotem();
         }
-        if (entry == null || entry.getTextureId() == null) {
+        if (entry == null) {
             return;
         }
 
-        Identifier renderTexId = entry.getTextureId();
-        boolean useFallback = false;
-        if (!entry.isTextureRegistered()) {
-            TotemManager.getInstance().ensureTextureRegisteredAsync(entry, null);
-            if (entry.getThumbnailTextureId() != null) {
+        long nowMs = Util.getMeasuringTimeMs();
+        Identifier streamTexId = entry.getStreamTextureId(nowMs);
+        Identifier renderTexId = streamTexId != null ? streamTexId : entry.getTextureId();
+        boolean isStreaming = streamTexId != null && streamTexId.getPath().startsWith("stream_");
+        boolean hasFullAtlas = entry.isTextureRegistered() && entry.getTexture() != null;
+
+        if (renderTexId == null || (!isStreaming && !hasFullAtlas)) {
+            if (!TotemManager.hasValidBinCache(entry) && entry.isTextureRegistered()) {
+                entry.setTextureRegistered(false);
+            }
+            if (!entry.isTextureRegistered()) {
+                TotemManager.getInstance().ensureTextureRegisteredAsync(entry, null);
+            }
+            if (entry.getThumbnailTexture() != null && entry.getThumbnailTextureId() != null) {
                 renderTexId = entry.getThumbnailTextureId();
-                useFallback = true;
             } else {
                 return;
             }
         }
 
-        // Millisecond-based timing ensures smooth playback at 30, 45, 60 FPS
-        final float u0, u1, v0, v1;
-        if (useFallback) {
-            TotemTextureTransform t = entry.getTransform();
-            u0 = t.isFlipX() ? 1.0f : 0.0f;
-            u1 = t.isFlipX() ? 0.0f : 1.0f;
-            v0 = t.isFlipY() ? 1.0f : 0.0f;
-            v1 = t.isFlipY() ? 0.0f : 1.0f;
-        } else {
-            long nowMs = Util.getMeasuringTimeMs();
-            float[] uvs = entry.getRenderUVs(nowMs);
-            u0 = uvs[0];
-            u1 = uvs[1];
-            v0 = uvs[2];
-            v1 = uvs[3];
-        }
+        float[] uvs = entry.getRenderUVsForTexture(renderTexId, isStreaming, nowMs);
+        final float u0 = uvs[0];
+        final float u1 = uvs[1];
+        final float v0 = uvs[2];
+        final float v1 = uvs[3];
 
         float[] bounds = entry.getQuadBounds();
         final float x0 = bounds[0];
@@ -76,7 +72,7 @@ public class TotemSpecialRenderer implements SpecialModelRenderer<TotemEntry> {
         final boolean unshaded = fullbright || isFloating || displayContext == ItemDisplayContext.GUI;
         final int renderLight = unshaded ? 0x00F000F0 : light;
 
-        RenderLayer layer = useFallback
+        RenderLayer layer = (isStreaming || renderTexId.equals(entry.getThumbnailTextureId()))
                 ? (unshaded ? RenderLayers.eyes(renderTexId) : RenderLayers.entityTranslucent(renderTexId))
                 : entry.getRenderLayer(unshaded);
         if (layer == null) return;
