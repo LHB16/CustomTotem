@@ -2,6 +2,7 @@
 
 mod app;
 mod converter;
+mod e7_proxy;
 
 use app::TotemApp;
 use eframe::egui;

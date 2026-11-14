@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Epic Seven Spine 60FPS Studio & Exporter</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      --bg-950: #020617;
+      --bg-900: #0f172a;
+      --bg-850: #131c31;
+      --bg-800: #1e293b;
+      --border: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --amber: #fbbf24;
+      --amber-hover: #fcd34d;
+      --sky: #38bdf8;
+      --emerald: #34d399;
+      --rose: #fb7185;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-950);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    header {
+      height: 54px;
+      background: rgba(15, 23, 42, 0.92);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-badge {
+      background: rgba(251, 191, 36, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 310px 1fr 370px;
+      min-height: 0;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.6);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel-left { border-right: 1px solid var(--border); }
+    .panel-right { border-left: 1px solid var(--border); }
+    .panel-section { padding: 12px; border-bottom: 1px solid var(--border); }
+    .input, select {
+      width: 100%;
+      background: var(--bg-950);
+      border: 1px solid var(--bg-800);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      outline: none;
+    }
+    .input:focus, select:focus { border-color: var(--amber); }
+    .pills { display: flex; gap: 4px; overflow-x: auto; padding-top: 8px; }
+    .pill {
+      background: var(--bg-950);
+      border: 1px solid var(--bg-800);
+      color: var(--muted);
+      padding: 4px 9px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pill.active {
+      background: var(--amber);
+      color: #020617;
+      border-color: var(--amber);
+    }
+    .pill:disabled {
+      opacity: 0.38;
+      cursor: not-allowed;
+    }
+    .char-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .char-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(2, 6, 23, 0.5);
+      border: 1px solid transparent;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+    }
+    .char-item:hover { background: var(--bg-900); }
+    .char-item.active {
+      background: rgba(251, 191, 36, 0.14);
+      border-color: rgba(251, 191, 36, 0.45);
+    }
+    .char-name { font-size: 12px; font-weight: 700; }
+    .char-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .tag-combat {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--sky);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      margin-left: 4px;
+    }
+    .stage {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+    .stage-toolbar {
+      padding: 8px 14px;
+      background: rgba(15, 23, 42, 0.75);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+    }
+    .canvas-wrap:active { cursor: grabbing; }
+    .checker-bg {
+      background-image:
+        linear-gradient(45deg, #1e293b 25%, transparent 25%),
+        linear-gradient(-45deg, #1e293b 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #1e293b 75%),
+        linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+      background-color: #0f172a;
+    }
+    .stage-frame {
+      position: relative;
+      max-width: 100%;
+      max-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      max-width: 100%;
+      max-height: calc(100vh - 160px);
+      object-fit: contain;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+      display: block;
+    }
+    .crop-guide {
+      position: absolute;
+      border: 2px dashed rgba(251, 191, 36, 0.75);
+      box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.38);
+      pointer-events: none;
+      display: none;
+    }
+    .crop-guide.show { display: block; }
+    .timeline-bar {
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.9);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--bg-800);
+      background: var(--bg-900);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: 0.15s;
+    }
+    .btn:hover { background: var(--bg-800); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-amber {
+      background: linear-gradient(90deg, #fbbf24, #f59e0b);
+      color: #020617;
+      border: none;
+    }
+    .btn-amber:hover { filter: brightness(1.08); }
+    .btn-sky {
+      background: linear-gradient(90deg, #38bdf8, #06b6d4);
+      color: #020617;
+      border: none;
+    }
+    .btn-emerald {
+      background: linear-gradient(90deg, #34d399, #10b981);
+      color: #020617;
+      border: none;
+    }
+    .card {
+      background: rgba(2, 6, 23, 0.65);
+      border: 1px solid var(--bg-800);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .card-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .card-desc { font-size: 11px; color: var(--muted); line-height: 1.45; margin-bottom: 10px; }
+    .label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+    }
+    .check-row input { accent-color: var(--amber); cursor: pointer; }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 20;
+      padding: 20px;
+      text-align: center;
+    }
+    .overlay.show { display: flex; }
+    .progress-box {
+      width: 320px;
+      height: 10px;
+      background: var(--bg-950);
+      border: 1px solid var(--bg-800);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #fbbf24, #f97316);
+      transition: width 0.1s;
+    }
+    .status-toast {
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      display: none;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .status-toast.show { display: block; }
+    .cors-banner {
+      background: rgba(251, 191, 36, 0.12);
+      border-bottom: 1px solid rgba(251, 191, 36, 0.35);
+      color: #fde68a;
+      font-size: 12px;
+      padding: 8px 16px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .cors-banner.show { display: flex; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <strong style="font-size:16px;">Epic Seven Spine 60FPS Studio &amp; Exporter</strong>
+      <span class="brand-badge">WebM Alpha + 60FPS PNG ZIP + Totem PNG</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);">
+      Kéo chuột: Di chuyển (Pan) • Cuộn chuột: Phóng to (Zoom)
+    </div>
+  </header>
+
+  <div id="corsBanner" class="cors-banner">
+    <span>
+      <strong>Lưu ý chế độ file://:</strong> CDN <code>assets.e7codex.com</code> chặn CORS nếu mở file HTML trực tiếp. Hãy mở qua nút <strong>"🌐 Tải Epic Seven..."</strong> trong <code>TotemConverter.exe</code> hoặc chạy <code>start_e7_studio.bat</code> để tải online (nạp file local bên phải vẫn hoạt động bình thường).
+    </span>
+  </div>
+
+  <div class="workspace">
+    <!-- LEFT SIDEBAR -->
+    <aside class="panel panel-left">
+      <div class="panel-section">
+        <input id="searchInput" class="input" type="text" placeholder="Tìm E7 (vd: Frieren, c1172, Ravi, Tamarinne)..." />
+        <div class="pills" id="kindPills"></div>
+        <div id="catalogCountLabel" style="font-size:10px;color:var(--muted);margin-top:6px;">Đang đồng bộ danh mục e7codex...</div>
+      </div>
+
+      <div class="char-list" id="charList"></div>
+
+      <div class="panel-section" style="background:var(--bg-950);display:flex;flex-direction:column;gap:8px;">
+        <div>
+          <label class="label">Loại Rig (Model Mode):</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="rigModeButtons">
+            <button class="pill active" data-rig="portrait">Portrait / Lobby</button>
+            <button class="pill" data-rig="combat" id="btnRigCombat">Combat (Skill)</button>
+          </div>
+        </div>
+
+        <div id="combatRigRow" style="display:none;">
+          <label class="label">Combat Sub-Rig:</label>
+          <select id="combatRigSelect"></select>
+        </div>
+
+        <div>
+          <label class="label">Biểu cảm / Skin Spine (Face Layer):</label>
+          <select id="skinSelect"></select>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px;padding-top:2px;">
+          <label class="check-row">
+            <input type="checkbox" id="chkHideFx" checked />
+            <span>Ẩn FX / Nền phụ (Hide FX/BG)</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="chkPma" checked />
+            <span>Premultiplied Alpha (PMA)</span>
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER STAGE -->
+    <main class="stage">
+      <div class="stage-toolbar">
+        <strong id="modelTitle">Đang khởi tạo...</strong>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn" id="btnZoomFace" style="padding:4px 9px;font-size:11px;color:var(--amber);">Zoom Cận Mặt</button>
+          <button class="btn" id="btnReframe" style="padding:4px 9px;font-size:11px;color:var(--sky);">Reframe Vùng Hiển Thị</button>
+          <button class="btn" id="btnResetCam" style="padding:4px 9px;font-size:11px;">Reset Camera</button>
+          <button class="btn" id="btnToggleGuide" style="padding:4px 9px;font-size:11px;">Khung Vuông Totem</button>
+          <button class="btn" id="btnSnapshot" style="padding:4px 9px;font-size:11px;">Chụp PNG</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrap checker-bg" id="canvasWrap">
+        <div class="stage-frame" id="stageFrame">
+          <canvas id="glCanvas" width="1080" height="1080"></canvas>
+          <div class="crop-guide" id="cropGuide"></div>
+        </div>
+        <div class="overlay" id="loadingOverlay">
+          <strong id="overlayTitle" style="font-size:15px;">Đang tải Model Spine 3.8...</strong>
+          <span id="overlaySub" style="font-size:12px;color:var(--muted);">Đang kết nối dữ liệu e7codex</span>
+          <div class="progress-box"><div class="progress-bar" id="progressBar"></div></div>
+        </div>
+      </div>
+
+      <div class="timeline-bar">
+        <button class="btn btn-amber" id="btnPlayPause" style="width:92px;">Tạm dừng</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:12px;color:var(--muted);">Animation:</span>
+          <select id="animSelect" style="width:200px;"></select>
+        </div>
+        <input id="timeScrub" type="range" min="0" max="2" step="0.01" value="0" style="flex:1;accent-color:var(--amber);" />
+        <span id="timeLabel" style="font-size:12px;font-family:monospace;width:110px;text-align:right;">0.00s / 0.00s</span>
+      </div>
+    </main>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside class="panel panel-right" style="overflow-y:auto;padding:12px;">
+      <div id="statusToast" class="status-toast"></div>
+
+      <div class="card">
+        <div class="card-title" style="color:var(--amber);">Cấu Hình Kết Xuất (Không Nền)</div>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+          <div>
+            <label class="label">Độ phân giải Canvas (ZIP &amp; WebM):</label>
+            <select id="resSelect">
+              <option value="1080x1080">1080×1080 (Full HD Vuông)</option>
+              <option value="1080x1920">1080×1920 (Dọc 9:16)</option>
+              <option value="720x720">720×720 (HD Vuông)</option>
+              <option value="512x512">512×512 (Totem Ultra HD)</option>
+              <option value="256x256">256×256 (Totem HD)</option>
+            </select>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label class="label">Target FPS:</label>
+              <select id="fpsSelect">
+                <option value="60" selected>60 FPS (Mượt gốc)</option>
+                <option value="30">30 FPS</option>
+                <option value="20">20 FPS</option>
+                <option value="15">15 FPS</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Thời lượng xuất:</label>
+              <select id="durModeSelect">
+                <option value="loop" selected>Trọn 1 vòng Anim</option>
+                <option value="cap4">Tối đa 4.0 giây</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1. EXPORT PNG ZIP -->
+      <div class="card" style="border-color:rgba(251,191,36,0.4);">
+        <div class="card-title">1. Xuất Chuỗi Frame (.ZIP chứa PNG)</div>
+        <div class="card-desc">
+          Trích xuất chính xác từng frame (<code>frame_0000.png</code>...) không nền (Alpha trong suốt 100%) đóng gói Store-mode <strong>.ZIP</strong>. Kéo thả thẳng vào <code>TotemConverter.exe</code>!
+        </div>
+        <button class="btn btn-amber" id="btnExportZip" style="width:100%;">
+          Xuất File .ZIP (Chuỗi PNG Không Nền)
+        </button>
+      </div>
+
+      <!-- 2. EXPORT TRANSPARENT WEBM -->
+      <div class="card" style="border-color:rgba(56,189,248,0.4);">
+        <div class="card-title">2. Xuất Video Không Nền (.WebM Alpha)</div>
+        <div class="card-desc">
+          Kết xuất video <code>.webm</code> (VP9/VP8 Alpha) giữ nguyên nền trong suốt (khác web gốc xuất nền đục).
+        </div>
+        <button class="btn btn-sky" id="btnExportWebm" style="width:100%;">
+          Xuất Video Không Nền (.WebM Alpha)
+        </button>
+      </div>
+
+      <!-- 3. EXPORT DIRECT MINECRAFT TOTEM -->
+      <div class="card" style="border-color:rgba(52,211,153,0.4);">
+        <div class="card-title">3. Xuất Thẳng Dải Totem Minecraft (.PNG)</div>
+        <div class="card-desc">
+          Ghép toàn bộ các frame thành 1 file ảnh Grid Atlas / Vertical Spritesheet PNG duy nhất chuẩn <code>CustomTotemMod</code>.
+        </div>
+        <div class="grid-2" style="margin-bottom:8px;">
+          <div>
+            <label class="label">Kích thước ô Totem:</label>
+            <select id="totemSizeSelect">
+              <option value="128">128×128 px</option>
+              <option value="256" selected>256×256 px (HD)</option>
+              <option value="512">512×512 px (Ultra)</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Căn vùng cắt:</label>
+            <select id="totemCropSelect">
+              <option value="center" selected>Cắt Vuông Từ Tâm</option>
+              <option value="fit">Fit Giữ Trọn Canvas</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-emerald" id="btnExportTotem" style="width:100%;">
+          Tải Ngay Totem Spritesheet (.PNG)
+        </button>
+      </div>
+
+      <!-- 4. LOCAL FILE UPLOAD & CUSTOM SLUG -->
+      <div class="card">
+        <div class="card-title">4. Nạp File Spine Từ Máy / Nhập Slug</div>
+        <div class="card-desc">Chọn cùng lúc bộ file <code>.json/.skel</code> + <code>.atlas</code> + <code>.png</code> từ máy tính:</div>
+        <input id="localFilesInput" type="file" multiple accept=".json,.skel,.atlas,.txt,.png,.webp" class="input" style="margin-bottom:8px;" />
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input id="customSlugInput" class="input" placeholder="Slug (vd: c1172, c1067_s02, npc1000)..." />
+          <label class="check-row" style="white-space:nowrap;">
+            <input type="checkbox" id="chkCustomCombat" />
+            <span>Combat</span>
+          </label>
+          <button class="btn" id="btnLoadCustomSlug">Tải</button>
+        </div>
+      </div>
+
+      <!-- 5. LAYER / SLOT INSPECTOR -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;">
+          <div class="card-title" style="margin-bottom:0;">5. Quản Lý Lớp / Slot (<span id="slotCountLabel">0</span>)</div>
+          <div style="display:flex;gap:4px;">
+            <button class="btn" id="btnApplyDefaultFx" style="padding:3px 7px;font-size:10px;">Ẩn FX</button>
+            <button class="btn" id="btnShowAllSlots" style="padding:3px 7px;font-size:10px;">Hiện hết</button>
+          </div>
+        </div>
+        <div class="card-desc">Bật/tắt từng bộ phận (hiệu ứng, nền, vũ khí...) trước khi xuất ZIP/WebM/Totem:</div>
+        <input id="slotSearchInput" class="input" placeholder="Lọc tên slot / layer..." style="margin-bottom:6px;" />
+        <div id="slotListBox" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;"></div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const IS_LOCAL_PROXY = location.protocol.startsWith('http') &&
+      (location.hostname === '127.0.0.1' || location.hostname === 'localhost');
+
+    const DATA_BASE = IS_LOCAL_PROXY ? '/e7/data' : 'https://e7codex.com/data';
+    const CDN_BASE = IS_LOCAL_PROXY ? '/e7cdn' : 'https://assets.e7codex.com';
+    const SPINE_PLAYER_URLS = IS_LOCAL_PROXY
+      ? ['/e7/spine-player.js', 'https://e7codex.com/spine-player.js']
+      : ['https://e7codex.com/spine-player.js'];
+
+    if (!IS_LOCAL_PROXY && location.protocol === 'file:') {
+      document.getElementById('corsBanner').classList.add('show');
+    }
+
+    // Fallback catalog if offline or before units.json resolves
+    const FALLBACK_UNITS = [
+      { id: 'c1172', base_id: 'c1172', variant: '', kind: 'unit', name: 'Frieren', hero_name: 'Frieren', attribute: 'wind', role: 'mage', has_combat: true },
+      { id: 'c1019', base_id: 'c1019', variant: '', kind: 'unit', name: 'Iseria', hero_name: 'Iseria', attribute: 'wind', role: 'ranger', has_combat: true },
+      { id: 'c1009', base_id: 'c1009', variant: '', kind: 'unit', name: 'Charlotte', hero_name: 'Charlotte', attribute: 'fire', role: 'knight', has_combat: true },
+      { id: 'c1002', base_id: 'c1002', variant: '', kind: 'unit', name: 'Cecilia', hero_name: 'Cecilia', attribute: 'fire', role: 'knight', has_combat: true },
+      { id: 'c1067_s02', base_id: 'c1067', variant: 's02', kind: 'unit', name: 'Tamarinne (Skin)', hero_name: 'Tamarinne', attribute: 'fire', role: 'manauser', has_combat: true },
+    ];
+
+    let UNITS = [...FALLBACK_UNITS];
+    let SLOT_EXCLUDES = {};
+    let STRIP_RULES = { prefix: null, suffix: null, token: null, perSlug: {} };
+
+    let selectedUnit = UNITS[0];
+    let rigMode = 'portrait'; // 'portrait' | 'combat'
+    let selectedCombatFile = '';
+    let filterKind = 'all';
+    let searchTerm = '';
+
+    let isPlaying = true;
+    let isExporting = false;
+    let currentAnim = '';
+    let animDuration = 2.0;
+    let currentFaceSkin = '';
+    let showCropGuide = false;
+
+    const canvas = document.getElementById('glCanvas');
+    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true })
+            || canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true });
+
+    let spineRuntimeLoaded = false;
+    let managedCtx = null;
+    let slotStash = new Map();
+    let hiddenSlots = new Set();
+    let excludedSlots = new Set();
+    let slotFilterTerm = '';
+
+    let ctx = {
+      spine: null,
+      shader: null,
+      batcher: null,
+      mvp: null,
+      renderer: null,
+      skeleton: null,
+      state: null,
+      bounds: null,
+      textures: [],
+      baseCamX: 0,
+      baseCamY: 0,
+      baseCamScale: 1,
+      panX: 0,
+      panY: 0,
+      zoom: 1,
+      protectNumeric: false,
+      slug: 'c1172'
+    };
+
+    // Pure JS Store-Mode ZIP Builder (compatible 100% with TotemConverter.exe)
+    const CRC_TABLE = (() => {
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        t[i] = c >>> 0;
+      }
+      return t;
+    })();
+    function crc32(bytes) {
+      let crc = 0xffffffff;
+      for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+    function createZipBlob(files) {
+      const enc = new TextEncoder();
+      let localSize = 0, cdSize = 0;
+      const entries = files.map(f => {
+        const nameBytes = enc.encode(f.name);
+        const data = f.data;
+        const entry = { nameBytes, data, crc: crc32(data), size: data.byteLength, offset: localSize };
+        localSize += 30 + nameBytes.length + entry.size;
+        cdSize += 46 + nameBytes.length;
+        return entry;
+      });
+      const out = new Uint8Array(localSize + cdSize + 22);
+      const view = new DataView(out.buffer);
+      let ptr = 0;
+      for (const e of entries) {
+        view.setUint32(ptr, 0x04034b50, true);
+        view.setUint16(ptr + 4, 20, true);
+        view.setUint16(ptr + 6, 0x0800, true);
+        view.setUint16(ptr + 8, 0, true);
+        view.setUint32(ptr + 14, e.crc, true);
+        view.setUint32(ptr + 18, e.size, true);
+        view.setUint32(ptr + 22, e.size, true);
+        view.setUint16(ptr + 26, e.nameBytes.length, true);
+        ptr += 30;
+        out.set(e.nameBytes, ptr); ptr += e.nameBytes.length;
+        out.set(e.data, ptr); ptr += e.size;
+      }
+      const cdOffset = ptr;
+      for (const e of entries) {
+        view.setUint32(ptr, 0x02014b50, true);
+        view.setUint16(ptr + 4, 20, true);
+        view.setUint16(ptr + 6, 20, true);
+        view.setUint16(ptr + 8, 0x0800, true);
+        view.setUint32(ptr + 16, e.crc, true);
+        view.setUint32(ptr + 20, e.size, true);
+        view.setUint32(ptr + 24, e.size, true);
+        view.setUint16(ptr + 28, e.nameBytes.length, true);
+        view.setUint32(ptr + 42, e.offset, true);
+        ptr += 46;
+        out.set(e.nameBytes, ptr); ptr += e.nameBytes.length;
+      }
+      view.setUint32(ptr, 0x06054b50, true);
+      view.setUint16(ptr + 8, entries.length, true);
+      view.setUint16(ptr + 10, entries.length, true);
+      view.setUint32(ptr + 12, cdSize, true);
+      view.setUint32(ptr + 16, cdOffset, true);
+      return new Blob([out], { type: 'application/zip' });
+    }
+
+    function showStatus(msg, isErr) {
+      if (isErr) console.error('[E7Studio]', msg);
+      const el = document.getElementById('statusToast');
+      el.textContent = msg;
+      el.style.background = isErr ? 'rgba(244,63,94,0.18)' : 'rgba(52,211,153,0.18)';
+      el.style.border = isErr ? '1px solid rgba(244,63,94,0.4)' : '1px solid rgba(52,211,153,0.4)';
+      el.style.color = isErr ? '#fda4af' : '#6ee7b7';
+      el.classList.add('show');
+    }
+
+    function loadScript(url) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Không thể tải script: ' + url));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function ensureSpineRuntime() {
+      if (spineRuntimeLoaded && window.spine && window.spine.webgl) return window.spine;
+      let lastErr = null;
+      for (const u of SPINE_PLAYER_URLS) {
+        try {
+          await loadScript(u);
+          if (window.spine && window.spine.webgl) {
+            spineRuntimeLoaded = true;
+            return window.spine;
+          }
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error('Không thể nạp Spine 3.8 runtime (spine-player.js)');
+    }
+
+    function loadImg(url) {
+      return new Promise((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = 'anonymous';
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('Không thể tải ảnh texture: ' + url));
+        i.src = url;
+      });
+    }
+
+    function parseAtlasPageNames(atlasText) {
+      const lines = atlasText.split(/\r?\n/);
+      const pages = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (!line.includes(':') && /\.(png|webp|jpg|jpeg)$/i.test(line)) {
+          if (!pages.includes(line)) pages.push(line);
+        }
+      }
+      return pages;
+    }
+
+    function computeProtectNumeric(data) {
+      const def = data.findSkin && data.findSkin('default');
+      if (!def || !def.attachments) return false;
+      let total = 0, numeric = 0;
+      for (let i = 0; i < def.attachments.length; i++) {
+        if (!def.attachments[i]) continue;
+        total++;
+        if (/^\d+$/.test(data.slots[i].name)) numeric++;
+      }
+      return total > 0 && (numeric / total) > 0.30;
+    }
+
+    function shouldHideFxSlot(name, protectNumeric, slug) {
+      const extras = STRIP_RULES.perSlug[slug];
+      if (extras) {
+        for (const re of extras) {
+          if (re.test(name)) return true;
+        }
+      }
+      if (protectNumeric && /^\d+$/.test(name)) return false;
+      if (!STRIP_RULES.prefix) return false;
+      return STRIP_RULES.prefix.test(name) || STRIP_RULES.suffix.test(name) || STRIP_RULES.token.test(name);
+    }
+
+    // Exact E7Codex face/skin layering logic (prevents missing body or double eyes)
+    function setupFaceSkinHelpers(spine, skeleton, data, slug) {
+      const EXPR_ORDER = ['smile', 'angry', 'panic', 'sad', 'special'];
+      const CRIT_SLOT_RE = /^(face|head|head2|eye[A-Z]?|mouth|lip|brow|eyebrow|nose|normal|normal\/normal|face\/face|head\/head)$/;
+      const CRIT_SETUP_RE = /^(face|head|head2|eye[A-Z]?|mouth|lip|brow|eyebrow|nose|normal|1|\d)$/;
+      const FACE_PIECE_RE = /^(?:[a-z]+\/)?(face|head|eye|mouth|lip|brow|eyebrow|nose|cheek)(?:[A-Z\d]|[_/]\w+)?$/i;
+      const SPLIT_FACE_RE = /^normal(?:\d+|c)$/i;
+      const EXPR_SKIN_NAMES = ['smile', 'angry', 'panic', 'sad', 'special', 'special2', 'special3'];
+
+      function skinSlotFilled(skin, slotIndex) {
+        if (!skin || !skin.attachments || !skin.attachments[slotIndex]) return false;
+        const entry = skin.attachments[slotIndex];
+        if (typeof entry.size === 'number') return entry.size > 0;
+        return Object.keys(entry).length > 0;
+      }
+      function skinHasFacePiece(skinName) {
+        const sk = data.findSkin(skinName);
+        if (!sk) return false;
+        for (let i = 0; i < data.slots.length; i++) {
+          if (!skinSlotFilled(sk, i)) continue;
+          const n = data.slots[i].name;
+          if (FACE_PIECE_RE.test(n) || SPLIT_FACE_RE.test(n)) return true;
+        }
+        return false;
+      }
+      function needsExpressionLayer() {
+        if (skinHasFacePiece('default') || skinHasFacePiece('normal')) return false;
+        for (const e of EXPR_SKIN_NAMES) if (skinHasFacePiece(e)) return true;
+        const defSkin = data.findSkin('default');
+        const normSkin = data.findSkin('normal');
+        for (let i = 0; i < data.slots.length; i++) {
+          const sd = data.slots[i];
+          const setup = sd.attachmentName;
+          if (!setup) continue;
+          if (!CRIT_SLOT_RE.test(sd.name)) continue;
+          if (!CRIT_SETUP_RE.test(setup)) continue;
+          if (defSkin && defSkin.getAttachment(i, setup)) continue;
+          if (normSkin && normSkin.getAttachment(i, setup)) continue;
+          return true;
+        }
+        return false;
+      }
+      function pickExpression() {
+        for (const e of EXPR_ORDER) {
+          const s = data.findSkin(e);
+          if (s && s.getAttachments && s.getAttachments().length > 0) return e;
+        }
+        return null;
+      }
+
+      const autoNeedsExpr = needsExpressionLayer();
+      function defaultFaceSkin() {
+        if (autoNeedsExpr) {
+          const auto = pickExpression();
+          if (auto) return auto;
+        }
+        if (data.findSkin('normal')) return 'normal';
+        if (data.findSkin('default')) return 'default';
+        return (data.skins[0] && data.skins[0].name) || 'default';
+      }
+
+      function applyCombined(expr) {
+        let face = (expr == null || expr === '') ? defaultFaceSkin() : expr;
+        if (face !== 'default' && !data.findSkin(face)) face = defaultFaceSkin();
+        currentFaceSkin = face;
+
+        const isEmotion = !!(face && face !== 'default' && face !== 'normal' && data.findSkin(face));
+        const layers = [];
+        if (data.findSkin('default')) layers.push('default');
+
+        if (face === 'default') {
+          // bare default only
+        } else if (isEmotion) {
+          layers.push(face);
+        } else if (face === 'normal' || !face) {
+          if (data.findSkin('normal')) layers.push('normal');
+        } else if (data.findSkin(face)) {
+          layers.push(face);
+        }
+
+        if (layers.length > 1) {
+          const combo = new spine.Skin('combo');
+          for (const n of layers) {
+            const sk = data.findSkin(n);
+            if (sk) combo.addSkin(sk);
+          }
+          skeleton.setSkin(combo);
+        } else if (layers.length === 1) {
+          skeleton.setSkinByName(layers[0]);
+        }
+        skeleton.setSlotsToSetupPose();
+      }
+
+      return { defaultFaceSkin, applyCombined };
+    }
+
+    let activeFaceHelper = null;
+
+    function syncHiddenSlotsToSkins() {
+      if (!ctx.skeleton || !ctx.skeleton.data) return;
+      const data = ctx.skeleton.data;
+      // Restore all stashed attachments first
+      for (let si = 0; si < data.skins.length; si++) {
+        const sk = data.skins[si];
+        const m = slotStash.get(si);
+        if (!m) continue;
+        for (const [idx, att] of m.entries()) {
+          sk.attachments[idx] = att;
+        }
+      }
+      // Clear attachments for hidden slots across all skins
+      const hiddenIndices = new Set();
+      for (let i = 0; i < data.slots.length; i++) {
+        if (hiddenSlots.has(data.slots[i].name)) hiddenIndices.add(i);
+      }
+      for (const sk of data.skins) {
+        for (const idx of hiddenIndices) {
+          sk.attachments[idx] = {};
+        }
+      }
+      if (activeFaceHelper) {
+        activeFaceHelper.applyCombined(currentFaceSkin);
+      }
+      if (ctx.state) {
+        ctx.state.apply(ctx.skeleton);
+        ctx.skeleton.updateWorldTransform();
+      }
+    }
+
+    function recomputeBounds(resetCamera) {
+      if (!ctx.skeleton || !ctx.spine) return;
+      const rt = ctx.spine;
+      ctx.skeleton.updateWorldTransform();
+      const off = new rt.Vector2(), sz = new rt.Vector2();
+      ctx.skeleton.getBounds(off, sz, []);
+      const b = (isFinite(off.x) && isFinite(off.y) && sz.x > 5 && sz.y > 5)
+        ? { x: off.x, y: off.y, w: sz.x, h: sz.y }
+        : { x: -500, y: 0, w: 1000, h: 1400 };
+      ctx.bounds = b;
+      ctx.baseCamX = b.x + b.w / 2;
+      ctx.baseCamY = b.y + b.h / 2;
+      ctx.baseCamScale = Math.max((b.w * 1.15) / canvas.width, (b.h * 1.15) / canvas.height, 0.08);
+      if (resetCamera) {
+        ctx.panX = 0;
+        ctx.panY = 0;
+        ctx.zoom = 1;
+      }
+    }
+
+    function renderFrame() {
+      if (!ctx.skeleton || !ctx.state || !ctx.spine || !gl) return;
+      const webgl = ctx.spine.webgl;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      const cx = ctx.baseCamX - ctx.panX;
+      const cy = ctx.baseCamY + ctx.panY;
+      const vw = (canvas.width * ctx.baseCamScale) / ctx.zoom;
+      const vh = (canvas.height * ctx.baseCamScale) / ctx.zoom;
+      ctx.mvp.ortho2d(cx - vw / 2, cy - vh / 2, vw, vh);
+
+      ctx.shader.bind();
+      ctx.shader.setUniformi(webgl.Shader.SAMPLER, 0);
+      ctx.shader.setUniform4x4f(webgl.Shader.MVP_MATRIX, ctx.mvp.values);
+
+      ctx.batcher.begin(ctx.shader);
+      ctx.renderer.premultipliedAlpha = document.getElementById('chkPma').checked;
+      ctx.renderer.draw(ctx.batcher, ctx.skeleton);
+      ctx.batcher.end();
+      ctx.shader.unbind();
+    }
+
+    let lastTime = performance.now();
+    function loop(now) {
+      requestAnimationFrame(loop);
+      if (isExporting) { lastTime = now; return; }
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+      if (ctx.skeleton && ctx.state && isPlaying) {
+        ctx.state.update(dt);
+        ctx.state.apply(ctx.skeleton);
+        ctx.skeleton.updateWorldTransform();
+        const tr = ctx.state.getCurrent(0);
+        if (tr && tr.animation) {
+          const dur = Math.max(0.01, tr.animation.duration);
+          const t = tr.trackTime % dur;
+          document.getElementById('timeScrub').value = t;
+          document.getElementById('timeLabel').textContent = `${t.toFixed(2)}s / ${animDuration.toFixed(2)}s`;
+        }
+      }
+      renderFrame();
+    }
+    requestAnimationFrame(loop);
+
+    function renderSlotInspector() {
+      const box = document.getElementById('slotListBox');
+      const countEl = document.getElementById('slotCountLabel');
+      if (!ctx.skeleton || !ctx.skeleton.data || !ctx.skeleton.data.slots) {
+        box.innerHTML = '';
+        countEl.textContent = '0';
+        return;
+      }
+      const allSlots = ctx.skeleton.data.slots.map(s => s.name);
+      countEl.textContent = String(allSlots.length);
+      const filtered = allSlots.filter(n => !slotFilterTerm || n.toLowerCase().includes(slotFilterTerm));
+      box.innerHTML = filtered.slice(0, 350).map(name => {
+        const isHidden = hiddenSlots.has(name);
+        const isExcl = excludedSlots.has(name);
+        return `
+          <button class="char-item" data-slot="${name.replace(/"/g, '&quot;')}" style="padding:5px 8px;border-radius:7px;opacity:${isHidden ? '0.45' : '1'};">
+            <span style="font-size:11px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}${isExcl ? ' (excl)' : ''}</span>
+            <span style="font-size:10px;color:${isHidden ? 'var(--rose)' : 'var(--emerald)'};flex-shrink:0;">${isHidden ? 'Đã ẩn' : 'Hiện'}</span>
+          </button>
+        `;
+      }).join('');
+      box.querySelectorAll('[data-slot]').forEach(btn => {
+        btn.onclick = () => {
+          const sname = btn.dataset.slot;
+          if (hiddenSlots.has(sname)) hiddenSlots.delete(sname);
+          else hiddenSlots.add(sname);
+          syncHiddenSlotsToSkins();
+          renderSlotInspector();
+          renderFrame();
+        };
+      });
+    }
+
+    function applyDefaultHiddenSlots(slug) {
+      hiddenSlots = new Set();
+      excludedSlots = new Set();
+      if (!ctx.skeleton || !ctx.skeleton.data) return;
+      const data = ctx.skeleton.data;
+      const exList = Array.isArray(SLOT_EXCLUDES[slug]) ? SLOT_EXCLUDES[slug] : [];
+      for (const name of exList) {
+        excludedSlots.add(name);
+        hiddenSlots.add(name);
+      }
+      if (document.getElementById('chkHideFx').checked) {
+        for (const sd of data.slots) {
+          if (shouldHideFxSlot(sd.name, ctx.protectNumeric, slug)) {
+            hiddenSlots.add(sd.name);
+          }
+        }
+      }
+    }
+
+    async function mountScene(skelBuf, jsonText, atlasText, imgMap, title, slug) {
+      const rt = await ensureSpineRuntime();
+      const webgl = rt.webgl;
+      if (!managedCtx) {
+        managedCtx = new webgl.ManagedWebGLRenderingContext(gl);
+      }
+      ctx.textures.forEach(t => { try { t?.dispose?.(); } catch (_) {} });
+
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      const texs = [];
+      const atlas = new rt.TextureAtlas(atlasText, (path) => {
+        const clean = path.split('/').pop();
+        const img = imgMap[path] || imgMap[clean] || Object.values(imgMap)[0];
+        const gt = new webgl.GLTexture(managedCtx, img, false);
+        gt.setFilters(rt.TextureFilter.Linear, rt.TextureFilter.Linear);
+        gt.setWraps(rt.TextureWrap.ClampToEdge, rt.TextureWrap.ClampToEdge);
+        texs.push(gt);
+        return gt;
+      });
+
+      const loader = new rt.AtlasAttachmentLoader(atlas);
+      const skelData = jsonText
+        ? new rt.SkeletonJson(loader).readSkeletonData(jsonText)
+        : new rt.SkeletonBinary(loader).readSkeletonData(new Uint8Array(skelBuf));
+
+      // Stash original slot attachment dictionaries per skin for clean toggling
+      slotStash = new Map();
+      for (let si = 0; si < skelData.skins.length; si++) {
+        const sk = skelData.skins[si];
+        const m = new Map();
+        for (let ix = 0; ix < sk.attachments.length; ix++) {
+          if (sk.attachments[ix]) m.set(ix, sk.attachments[ix]);
+        }
+        slotStash.set(si, m);
+      }
+
+      const skeleton = new rt.Skeleton(skelData);
+      const faceHelper = setupFaceSkinHelpers(rt, skeleton, skelData, slug);
+      activeFaceHelper = faceHelper;
+
+      const skinSel = document.getElementById('skinSelect');
+      const skinNames = skelData.skins.map(s => s.name);
+      skinSel.innerHTML = skinNames.map(n => `<option value="${n}">${n}</option>`).join('');
+      const defFace = faceHelper.defaultFaceSkin();
+      faceHelper.applyCombined(defFace);
+      if (skinNames.includes(defFace)) skinSel.value = defFace;
+
+      const state = new rt.AnimationState(new rt.AnimationStateData(skelData));
+      const allAnims = skelData.animations || [];
+      const playableAnims = allAnims.filter(a => a.duration > 0);
+      const animList = playableAnims.length ? playableAnims : allAnims;
+
+      const defAnim = animList.find(a => /^(idle|wait|stand)$/i.test(a.name))
+        || animList.find(a => /idle|wait|stand/i.test(a.name))
+        || animList[0];
+
+      currentAnim = defAnim ? defAnim.name : '';
+      animDuration = defAnim ? Math.max(0.05, defAnim.duration) : 2.0;
+
+      if (currentAnim) {
+        state.setAnimation(0, currentAnim, true);
+        state.apply(skeleton);
+        skeleton.updateWorldTransform();
+      }
+
+      if (ctx.shader) { try { ctx.shader.dispose(); } catch (_) {} }
+      if (ctx.batcher) { try { ctx.batcher.dispose(); } catch (_) {} }
+
+      ctx = {
+        spine: rt,
+        shader: webgl.Shader.newTwoColoredTextured(managedCtx),
+        batcher: new webgl.PolygonBatcher(managedCtx, true, 10920),
+        mvp: new webgl.Matrix4(),
+        renderer: new webgl.SkeletonRenderer(managedCtx, true),
+        skeleton,
+        state,
+        bounds: null,
+        textures: texs,
+        baseCamX: 0,
+        baseCamY: 0,
+        baseCamScale: 1,
+        panX: 0,
+        panY: 0,
+        zoom: 1,
+        protectNumeric: computeProtectNumeric(skelData),
+        slug: slug || 'custom'
+      };
+
+      applyDefaultHiddenSlots(ctx.slug);
+      syncHiddenSlotsToSkins();
+      recomputeBounds(true);
+
+      document.getElementById('modelTitle').textContent = title;
+      const animSel = document.getElementById('animSelect');
+      animSel.innerHTML = animList.map(a =>
+        `<option value="${a.name}" ${a.name === currentAnim ? 'selected' : ''}>${a.name} (${a.duration.toFixed(2)}s)</option>`
+      ).join('');
+      document.getElementById('timeScrub').max = Math.max(0.01, animDuration);
+
+      renderSlotInspector();
+      renderFrame();
+      updateCropGuideOverlay();
+    }
+
+    async function loadRemoteModel() {
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      const u = selectedUnit;
+      const isCombat = (rigMode === 'combat') && (u.has_combat || u.forceCustom);
+      const rigFolder = isCombat ? `${u.id}/combat` : `${u.id}`;
+      let rigStem = u.id;
+      if (isCombat && selectedCombatFile) {
+        rigStem = selectedCombatFile.replace(/\.json$/i, '');
+      }
+
+      document.getElementById('overlayTitle').textContent = `Đang tải ${u.name || u.id} (${rigStem})...`;
+      document.getElementById('overlaySub').textContent = `Đang lấy Spine JSON & Atlas (${isCombat ? 'Combat' : 'Portrait'})`;
+      document.getElementById('progressBar').style.width = '25%';
+
+      try {
+        await ensureSpineRuntime();
+        document.getElementById('progressBar').style.width = '45%';
+
+        const jsonUrl = `${CDN_BASE}/${rigFolder}/${rigStem}.json`;
+        const atlasUrl = `${CDN_BASE}/${rigFolder}/${rigStem}.atlas`;
+
+        const [jsonRes, atlasRes] = await Promise.all([fetch(jsonUrl), fetch(atlasUrl)]);
+        if (!jsonRes.ok) throw new Error(`Không tải được ${rigStem}.json (HTTP ${jsonRes.status})`);
+        if (!atlasRes.ok) throw new Error(`Không tải được ${rigStem}.atlas (HTTP ${atlasRes.status})`);
+
+        const [jsonText, atlasText] = await Promise.all([jsonRes.text(), atlasRes.text()]);
+        const pages = parseAtlasPageNames(atlasText);
+        if (!pages.length) pages.push(`${rigStem}.png`);
+
+        document.getElementById('overlaySub').textContent = `Đang tải ${pages.length} texture PNG...`;
+        document.getElementById('progressBar').style.width = '75%';
+
+        const imgs = await Promise.all(pages.map(p => loadImg(`${CDN_BASE}/${rigFolder}/${p}`)));
+        const imgMap = {};
+        pages.forEach((p, idx) => { imgMap[p] = imgs[idx]; });
+
+        const labelName = u.hero_name && u.variant ? `${u.hero_name} — ${u.name}` : (u.name || u.id);
+        await mountScene(null, jsonText, atlasText, imgMap, `${labelName} (${u.id}${isCombat ? ' · Combat' : ''})`, u.id);
+        showStatus(`Đã tải thành công ${labelName} (${rigStem}) — nền trong suốt sẵn sàng xuất!`, false);
+      } catch (err) {
+        console.error('[E7Studio] loadRemoteModel error:', err);
+        const hint = !IS_LOCAL_PROXY
+          ? ' (Lưu ý: assets.e7codex.com chặn CORS từ file://, hãy mở qua TotemConverter.exe hoặc start_e7_studio.bat)'
+          : '';
+        showStatus('Lỗi: ' + err.message + hint, true);
+      } finally {
+        ov.classList.remove('show');
+      }
+    }
+
+    function updateCombatUiForUnit() {
+      const combatBtn = document.getElementById('btnRigCombat');
+      const hasCombat = !!selectedUnit.has_combat;
+      combatBtn.disabled = !hasCombat;
+      if (!hasCombat && rigMode === 'combat') {
+        rigMode = 'portrait';
+      }
+      document.querySelectorAll('#rigModeButtons .pill').forEach(b => {
+        b.classList.toggle('active', b.dataset.rig === rigMode);
+      });
+
+      const row = document.getElementById('combatRigRow');
+      const sel = document.getElementById('combatRigSelect');
+      const rigs = selectedUnit.combat_rigs;
+      if (rigMode === 'combat' && Array.isArray(rigs) && rigs.length > 1) {
+        row.style.display = 'block';
+        sel.innerHTML = rigs.map(r => `<option value="${r.file}">${r.label || r.file}</option>`).join('');
+        selectedCombatFile = rigs[0].file;
+        sel.value = selectedCombatFile;
+      } else {
+        row.style.display = 'none';
+        selectedCombatFile = '';
+      }
+    }
+
+    function renderUnitList() {
+      const list = document.getElementById('charList');
+      const q = searchTerm.trim().toLowerCase();
+      const filtered = UNITS.filter(u => {
+        if (filterKind !== 'all') {
+          if (filterKind === 'other') {
+            if (['unit', 'npc', 'monster'].includes(u.kind)) return false;
+          } else if (u.kind !== filterKind) {
+            return false;
+          }
+        }
+        if (!q) return true;
+        return (u.name || '').toLowerCase().includes(q)
+          || (u.hero_name || '').toLowerCase().includes(q)
+          || (u.id || '').toLowerCase().includes(q)
+          || (u.slug || '').toLowerCase().includes(q);
+      });
+
+      document.getElementById('catalogCountLabel').textContent = `Hiển thị ${filtered.length} / ${UNITS.length} model`;
+
+      const slice = filtered.slice(0, 300);
+      list.innerHTML = slice.map(u => {
+        const displayTitle = u.hero_name && u.variant ? `${u.hero_name}: ${u.name}` : (u.name || u.id);
+        const subMeta = [u.id, u.kind, u.attribute, u.role].filter(Boolean).join(' • ');
+        return `
+          <button class="char-item ${u.id === selectedUnit.id ? 'active' : ''}" data-id="${u.id}">
+            <div style="min-width:0;flex:1;">
+              <div class="char-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                ${displayTitle}${u.has_combat ? '<span class="tag-combat">Combat</span>' : ''}
+              </div>
+              <div class="char-meta">${subMeta}</div>
+            </div>
+            <span style="color:var(--amber);">›</span>
+          </button>
+        `;
+      }).join('');
+
+      if (filtered.length > 300) {
+        list.insertAdjacentHTML('beforeend', `<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px;">Đang hiện 300/${filtered.length} kết quả — nhập tên/ID để lọc chính xác hơn.</div>`);
+      }
+
+      list.querySelectorAll('.char-item').forEach(btn => {
+        btn.onclick = () => {
+          const found = UNITS.find(x => x.id === btn.dataset.id);
+          if (!found) return;
+          selectedUnit = found;
+          updateCombatUiForUnit();
+          renderUnitList();
+          loadRemoteModel();
+        };
+      });
+    }
+
+    async function syncE7Metadata() {
+      try {
+        const [uRes, exRes, spRes] = await Promise.allSettled([
+          fetch(`${DATA_BASE}/units.json`),
+          fetch(`${DATA_BASE}/slot_excludes.json`),
+          fetch(`${DATA_BASE}/strip_patterns.json`)
+        ]);
+
+        if (exRes.status === 'fulfilled' && exRes.value.ok) {
+          SLOT_EXCLUDES = await exRes.value.json();
+        }
+        if (spRes.status === 'fulfilled' && spRes.value.ok) {
+          const sp = await spRes.value.json();
+          if (sp.global) {
+            STRIP_RULES.prefix = new RegExp(sp.global.hide_prefix, 'i');
+            STRIP_RULES.suffix = new RegExp(sp.global.hide_fx_suffix, 'i');
+            STRIP_RULES.token = new RegExp(sp.global.hide_fx_token, 'i');
+          }
+          for (const tbl of ['per_slug', 'per_slug_thumb_only']) {
+            const group = sp[tbl] || {};
+            for (const k of Object.keys(group)) {
+              STRIP_RULES.perSlug[k] = (STRIP_RULES.perSlug[k] || []).concat(group[k].map(p => new RegExp(p, 'i')));
+            }
+          }
+        }
+        if (uRes.status === 'fulfilled' && uRes.value.ok) {
+          const raw = await uRes.value.json();
+          const arr = Array.isArray(raw) ? raw : (raw.units || Object.values(raw));
+          const spineUnits = arr.filter(x => x && x.id && Array.isArray(x.spine) && x.spine.length > 0);
+          if (spineUnits.length > 0) {
+            UNITS = spineUnits;
+            selectedUnit = UNITS.find(x => x.id === 'c1172') || UNITS[0];
+          }
+        }
+      } catch (e) {
+        console.warn('Sync metadata error:', e);
+      } finally {
+        updateCombatUiForUnit();
+        renderUnitList();
+        if (IS_LOCAL_PROXY) {
+          loadRemoteModel();
+        } else {
+          document.getElementById('modelTitle').textContent = 'Chế độ file:// — Chọn file local hoặc mở qua TotemConverter.exe';
+        }
+      }
+    }
+
+    // UI Wiring
+    const KINDS = [
+      { id: 'all', label: 'Tất cả' },
+      { id: 'unit', label: 'Heroes' },
+      { id: 'npc', label: 'NPCs' },
+      { id: 'monster', label: 'Monsters' },
+      { id: 'other', label: 'Khác' }
+    ];
+    const kindBox = document.getElementById('kindPills');
+    kindBox.innerHTML = KINDS.map(k => `<button class="pill ${k.id === 'all' ? 'active' : ''}" data-kind="${k.id}">${k.label}</button>`).join('');
+    kindBox.querySelectorAll('.pill').forEach(b => {
+      b.onclick = () => {
+        filterKind = b.dataset.kind;
+        kindBox.querySelectorAll('.pill').forEach(x => x.classList.toggle('active', x.dataset.kind === filterKind));
+        renderUnitList();
+      };
+    });
+
+    document.getElementById('searchInput').oninput = (e) => {
+      searchTerm = e.target.value;
+      renderUnitList();
+    };
+
+    document.querySelectorAll('#rigModeButtons .pill').forEach(b => {
+      b.onclick = () => {
+        if (b.disabled) return;
+        rigMode = b.dataset.rig;
+        updateCombatUiForUnit();
+        loadRemoteModel();
+      };
+    });
+
+    document.getElementById('combatRigSelect').onchange = (e) => {
+      selectedCombatFile = e.target.value;
+      loadRemoteModel();
+    };
+
+    document.getElementById('skinSelect').onchange = (e) => {
+      if (activeFaceHelper) {
+        activeFaceHelper.applyCombined(e.target.value);
+        if (ctx.state) {
+          ctx.state.apply(ctx.skeleton);
+          ctx.skeleton.updateWorldTransform();
+        }
+        renderFrame();
+      }
+    };
+
+    document.getElementById('chkHideFx').onchange = () => {
+      applyDefaultHiddenSlots(ctx.slug);
+      syncHiddenSlotsToSkins();
+      recomputeBounds(false);
+      renderSlotInspector();
+      renderFrame();
+    };
+
+    document.getElementById('chkPma').onchange = () => renderFrame();
+
+    document.getElementById('animSelect').onchange = (e) => {
+      currentAnim = e.target.value;
+      if (ctx.state && ctx.skeleton) {
+        ctx.skeleton.setToSetupPose();
+        ctx.state.setAnimation(0, currentAnim, true);
+        ctx.state.apply(ctx.skeleton);
+        ctx.skeleton.updateWorldTransform();
+        const found = ctx.skeleton.data.animations.find(a => a.name === currentAnim);
+        animDuration = found ? Math.max(0.05, found.duration) : 2.0;
+        document.getElementById('timeScrub').max = animDuration;
+        renderFrame();
+      }
+    };
+
+    document.getElementById('btnPlayPause').onclick = (e) => {
+      isPlaying = !isPlaying;
+      e.target.textContent = isPlaying ? 'Tạm dừng' : 'Phát tiếp';
+    };
+
+    document.getElementById('timeScrub').oninput = (e) => {
+      isPlaying = false;
+      document.getElementById('btnPlayPause').textContent = 'Phát tiếp';
+      const tr = ctx.state?.getCurrent(0);
+      if (tr) {
+        tr.trackTime = parseFloat(e.target.value);
+        ctx.state.apply(ctx.skeleton);
+        ctx.skeleton.updateWorldTransform();
+        renderFrame();
+        document.getElementById('timeLabel').textContent = `${tr.trackTime.toFixed(2)}s / ${animDuration.toFixed(2)}s`;
+      }
+    };
+
+    // Pan & Zoom
+    let dragging = false, lx = 0, ly = 0;
+    const wrap = document.getElementById('canvasWrap');
+    wrap.onmousedown = (e) => { dragging = true; lx = e.clientX; ly = e.clientY; };
+    window.onmousemove = (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lx, dy = e.clientY - ly;
+      lx = e.clientX; ly = e.clientY;
+      const r = canvas.getBoundingClientRect();
+      const wf = ctx.baseCamScale / ctx.zoom;
+      ctx.panX += dx * (canvas.width / Math.max(1, r.width)) * wf;
+      ctx.panY += dy * (canvas.height / Math.max(1, r.height)) * wf;
+      renderFrame();
+    };
+    window.onmouseup = () => { dragging = false; };
+    wrap.onwheel = (e) => {
+      e.preventDefault();
+      ctx.zoom = Math.min(8, Math.max(0.15, ctx.zoom * (e.deltaY < 0 ? 1.12 : 0.89)));
+      renderFrame();
+    };
+
+    document.getElementById('btnResetCam').onclick = () => { ctx.panX = 0; ctx.panY = 0; ctx.zoom = 1; renderFrame(); };
+    document.getElementById('btnReframe').onclick = () => { recomputeBounds(true); renderFrame(); };
+    document.getElementById('btnZoomFace').onclick = () => {
+      if (!ctx.bounds) return;
+      ctx.zoom = 2.0;
+      ctx.panX = 0;
+      ctx.panY = ctx.bounds.h * 0.22;
+      renderFrame();
+    };
+
+    function updateCropGuideOverlay() {
+      const guide = document.getElementById('cropGuide');
+      if (!showCropGuide) {
+        guide.classList.remove('show');
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const side = Math.min(rect.width, rect.height);
+      guide.style.width = `${side}px`;
+      guide.style.height = `${side}px`;
+      guide.classList.add('show');
+    }
+    window.addEventListener('resize', updateCropGuideOverlay);
+    document.getElementById('btnToggleGuide').onclick = (e) => {
+      showCropGuide = !showCropGuide;
+      e.target.style.color = showCropGuide ? 'var(--amber)' : '';
+      updateCropGuideOverlay();
+    };
+
+    document.getElementById('btnSnapshot').onclick = () => {
+      renderFrame();
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `${ctx.slug}_${currentAnim || 'pose'}.png`;
+      a.click();
+    };
+
+    document.getElementById('resSelect').onchange = (e) => {
+      const [w, h] = e.target.value.split('x').map(Number);
+      canvas.width = w;
+      canvas.height = h;
+      recomputeBounds(false);
+      renderFrame();
+      setTimeout(updateCropGuideOverlay, 0);
+    };
+
+    function getExportDuration() {
+      const mode = document.getElementById('durModeSelect').value;
+      const raw = Math.max(0.05, animDuration);
+      return mode === 'cap4' ? Math.min(4.0, raw) : raw;
+    }
+
+    function safeFileBase() {
+      const rawName = (selectedUnit?.hero_name || selectedUnit?.name || ctx.slug || 'e7_unit')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      const animTag = (currentAnim || 'anim').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      return `${ctx.slug}_${rawName}_${animTag}`;
+    }
+
+    // EXPORT 1: PNG SEQUENCE ZIP (60FPS / 30FPS / 20FPS)
+    document.getElementById('btnExportZip').onclick = async () => {
+      if (!ctx.skeleton || isExporting) return;
+      const fps = Number(document.getElementById('fpsSelect').value) || 60;
+      const dur = getExportDuration();
+      const total = Math.max(1, Math.round(dur * fps));
+      const dt = 1 / fps;
+      isExporting = true;
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      try {
+        ctx.skeleton.setToSetupPose();
+        ctx.state.setAnimation(0, currentAnim, false);
+        const files = [];
+        for (let i = 0; i < total; i++) {
+          ctx.state.update(i === 0 ? 0 : dt);
+          ctx.state.apply(ctx.skeleton);
+          ctx.skeleton.updateWorldTransform();
+          renderFrame();
+          const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          files.push({ name: `frame_${String(i).padStart(4, '0')}.png`, data: bytes });
+          if (i % 3 === 0 || i === total - 1) {
+            document.getElementById('overlayTitle').textContent = `Đang xuất Frame PNG: ${i + 1} / ${total} (${fps} FPS)`;
+            document.getElementById('overlaySub').textContent = 'Đóng gói Store-mode .ZIP không nền cho TotemConverter.exe';
+            document.getElementById('progressBar').style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+        const zipBlob = createZipBlob(files);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = `${safeFileBase()}_${fps}fps_${total}f_frames.zip`;
+        a.click();
+        showStatus(`Đã xuất ${total} frame PNG (${fps} FPS) không nền vào file .ZIP! Kéo thả file ZIP này vào TotemConverter.exe để tạo Totem.`, false);
+      } catch (e) {
+        showStatus('Lỗi xuất ZIP: ' + e.message, true);
+      } finally {
+        ctx.state.setAnimation(0, currentAnim, true);
+        ov.classList.remove('show');
+        isExporting = false;
+      }
+    };
+
+    // EXPORT 2: TRANSPARENT WEBM VIDEO
+    document.getElementById('btnExportWebm').onclick = async () => {
+      if (!ctx.skeleton || isExporting) return;
+      const fps = Number(document.getElementById('fpsSelect').value) || 60;
+      const dur = getExportDuration();
+      const total = Math.max(1, Math.round(dur * fps));
+      const dt = 1 / fps;
+      isExporting = true;
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      try {
+        const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+        const stream = canvas.captureStream(0);
+        const track = stream.getVideoTracks()[0];
+        const chunks = [];
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 16000000 });
+        rec.ondataavailable = e => { if (e.data?.size > 0) chunks.push(e.data); };
+        const stopP = new Promise(r => { rec.onstop = r; });
+
+        ctx.skeleton.setToSetupPose();
+        ctx.state.setAnimation(0, currentAnim, false);
+        rec.start();
+        for (let i = 0; i < total; i++) {
+          ctx.state.update(i === 0 ? 0 : dt);
+          ctx.state.apply(ctx.skeleton);
+          ctx.skeleton.updateWorldTransform();
+          renderFrame();
+          if (track && typeof track.requestFrame === 'function') track.requestFrame();
+          document.getElementById('overlayTitle').textContent = `Đang ghi Video WebM Alpha: ${i + 1} / ${total} (${fps} FPS)`;
+          document.getElementById('overlaySub').textContent = 'WebM nền trong suốt (Alpha Channel)';
+          document.getElementById('progressBar').style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+          await new Promise(r => setTimeout(r, 1000 / fps));
+        }
+        rec.stop();
+        await stopP;
+        const blob = new Blob(chunks, { type: mime });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${safeFileBase()}_${fps}fps_alpha.webm`;
+        a.click();
+        showStatus(`Đã xuất Video không nền (.webm @ ${fps} FPS) thành công!`, false);
+      } catch (e) {
+        showStatus('Lỗi xuất WebM: ' + e.message, true);
+      } finally {
+        ctx.state.setAnimation(0, currentAnim, true);
+        ov.classList.remove('show');
+        isExporting = false;
+      }
+    };
+
+    // EXPORT 3: MINECRAFT TOTEM SPRITESHEET PNG
+    document.getElementById('btnExportTotem').onclick = async () => {
+      if (!ctx.skeleton || isExporting) return;
+      const fps = Number(document.getElementById('fpsSelect').value) || 60;
+      const dur = getExportDuration();
+      const total = Math.max(1, Math.round(dur * fps));
+      const dt = 1 / fps;
+      const size = Number(document.getElementById('totemSizeSelect').value) || 256;
+      const cropMode = document.getElementById('totemCropSelect').value;
+
+      const cols = (total * size > 8192) ? Math.ceil(Math.sqrt(total)) : 1;
+      const rows = Math.ceil(total / cols);
+
+      const sc = document.createElement('canvas');
+      sc.width = cols * size;
+      sc.height = rows * size;
+      const sctx = sc.getContext('2d');
+
+      isExporting = true;
+      const ov = document.getElementById('loadingOverlay');
+      ov.classList.add('show');
+      try {
+        ctx.skeleton.setToSetupPose();
+        ctx.state.setAnimation(0, currentAnim, false);
+
+        const cw = canvas.width, ch = canvas.height;
+        const minSide = Math.min(cw, ch);
+        const sx = (cw - minSide) / 2, sy = (ch - minSide) / 2;
+
+        // Fit dimensions if user selects Fit mode
+        const fitScale = Math.min(size / cw, size / ch);
+        const dw = Math.round(cw * fitScale), dh = Math.round(ch * fitScale);
+        const dxOff = Math.floor((size - dw) / 2), dyOff = Math.floor((size - dh) / 2);
+
+        for (let i = 0; i < total; i++) {
+          ctx.state.update(i === 0 ? 0 : dt);
+          ctx.state.apply(ctx.skeleton);
+          ctx.skeleton.updateWorldTransform();
+          renderFrame();
+
+          const cellX = (i % cols) * size;
+          const cellY = Math.floor(i / cols) * size;
+          if (cropMode === 'fit') {
+            sctx.drawImage(canvas, 0, 0, cw, ch, cellX + dxOff, cellY + dyOff, dw, dh);
+          } else {
+            sctx.drawImage(canvas, sx, sy, minSide, minSide, cellX, cellY, size, size);
+          }
+
+          if (i % 4 === 0 || i === total - 1) {
+            document.getElementById('overlayTitle').textContent = `Đang ghép Totem Spritesheet: ${i + 1} / ${total}`;
+            document.getElementById('overlaySub').textContent = `Kích thước ảnh xuất: ${sc.width}×${sc.height} px (${cols}×${rows} ô)`;
+            document.getElementById('progressBar').style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+        const blob = await new Promise(r => sc.toBlob(r, 'image/png'));
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const gridTag = cols > 1 ? `_grid${cols}x${rows}_${total}f` : '';
+        a.download = `${safeFileBase()}${gridTag}_${fps}fps.png`;
+        a.click();
+        showStatus(`Đã xuất Totem Spritesheet (${sc.width}×${sc.height}px, ${total} frames) thành công!`, false);
+      } catch (e) {
+        showStatus('Lỗi xuất Totem: ' + e.message, true);
+      } finally {
+        ctx.state.setAnimation(0, currentAnim, true);
+        ov.classList.remove('show');
+        isExporting = false;
+      }
+    };
+
+    // Local Spine files upload
+    document.getElementById('localFilesInput').onchange = async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      try {
+        await ensureSpineRuntime();
+        const atlasF = files.find(f => /\.atlas(\.txt)?$/i.test(f.name));
+        const jsonF = files.find(f => /\.json$/i.test(f.name));
+        const skelF = files.find(f => /\.skel$/i.test(f.name));
+        const pngs = files.filter(f => /\.(png|webp)$/i.test(f.name));
+        if (!atlasF || (!jsonF && !skelF) || !pngs.length) {
+          throw new Error('Hãy chọn đủ bộ file: .json (hoặc .skel) + .atlas + .png');
+        }
+        const map = {};
+        for (const p of pngs) map[p.name] = await loadImg(URL.createObjectURL(p));
+        const baseSlug = (jsonF || skelF).name.replace(/\.(json|skel)$/i, '');
+        await mountScene(
+          skelF ? await skelF.arrayBuffer() : null,
+          jsonF ? await jsonF.text() : null,
+          await atlasF.text(),
+          map,
+          'Local: ' + (jsonF || skelF).name,
+          baseSlug
+        );
+        showStatus('Đã nạp thành công model Spine từ máy tính!', false);
+      } catch (err) {
+        showStatus('Lỗi nạp file local: ' + err.message, true);
+      }
+    };
+
+    document.getElementById('btnLoadCustomSlug').onclick = () => {
+      const raw = document.getElementById('customSlugInput').value.trim();
+      if (!raw) return;
+      const wantCombat = document.getElementById('chkCustomCombat').checked;
+      const existing = UNITS.find(u => u.id.toLowerCase() === raw.toLowerCase());
+      if (existing) {
+        selectedUnit = existing;
+      } else {
+        selectedUnit = { id: raw, name: raw, hero_name: raw, variant: '', kind: 'unit', has_combat: wantCombat, forceCustom: true };
+      }
+      rigMode = wantCombat ? 'combat' : 'portrait';
+      updateCombatUiForUnit();
+      loadRemoteModel();
+    };
+
+    document.getElementById('slotSearchInput').oninput = (e) => {
+      slotFilterTerm = e.target.value.trim().toLowerCase();
+      renderSlotInspector();
+    };
+    document.getElementById('btnShowAllSlots').onclick = () => {
+      hiddenSlots.clear();
+      syncHiddenSlotsToSkins();
+      renderSlotInspector();
+      renderFrame();
+    };
+    document.getElementById('btnApplyDefaultFx').onclick = () => {
+      document.getElementById('chkHideFx').checked = true;
+      applyDefaultHiddenSlots(ctx.slug);
+      syncHiddenSlotsToSkins();
+      recomputeBounds(false);
+      renderSlotInspector();
+      renderFrame();
+    };
+
+    renderUnitList();
+    syncE7Metadata();
+  </script>
+</body>
+</html>

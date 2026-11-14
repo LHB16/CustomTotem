@@ -7,6 +7,7 @@
 * **Khởi động tức thì & Tiết kiệm tài nguyên:** Khởi động dưới 0.1 giây, tiêu tốn chưa đến 30 MB RAM.
 * **Đa dạng nguồn đầu vào:** Hỗ trợ Video, GIF, Thư mục chứa chuỗi ảnh (frame_0000.png, v.v.) và tự động phân tách dải ảnh Totem Spritesheet PNG có sẵn.
 * **Tích hợp Nikke Live2D Online:** Nút bấm **"🌐 Tải Nikke Live2D..."** mở trực tiếp **Nikke Totem Studio** với hơn 50 nhân vật, hỗ trợ xuất dải Totem PNG trong suốt chỉ trong 0.5 giây!
+* **Tích hợp Epic Seven Spine (E7 Codex):** Nút bấm **"⚔ Tải Epic Seven..."** khởi chạy local proxy vượt CORS tích hợp sẵn và mở **Epic Seven Spine 60FPS Studio** (850+ Heroes/NPCs/Monsters, Portrait & Combat rigs, lọc FX/Slot, xuất ZIP chuỗi PNG không nền, WebM Alpha hoặc Totem PNG).
 * **Sắp xếp tự nhiên (Natural Sort):** Tự động nhận diện và ghép các file ảnh trong thư mục theo đúng thứ tự thời gian chữ và số.
 * **Kéo thả trực tiếp:** Kéo thả video, GIF, thư mục ảnh hoặc file Totem PNG vào cửa sổ app.
 * **Trình xem trước (Preview Animation):** Chạy hiệu ứng động vòng lặp trực tiếp với tốc độ mượt mà.
@@ -24,3 +25,4 @@
 * **Totem Converter (`.exe`):** `tools/TotemConverter.exe`
 * **Nikke Live2D Totem Studio:** `tools/nikke_capture/nikke_studio.html` (Giao diện Studio chọn nhân vật từ danh mục 50+ Nikke và xuất thẳng Totem 0.5s).
 * **Nikke Bookmarklet / Userscript:** `tools/nikke_capture/install.html` (Tiện ích 1-click xuất dải Totem trực tiếp khi lướt `nikke.gg/live2d` hoặc `nikke-db.pages.dev`).
+* **Epic Seven Spine 60FPS Studio:** `tools/e7_capture/e7_studio.html` (Chạy trực tiếp qua nút **"⚔ Tải Epic Seven..."** trong `TotemConverter.exe` hoặc qua `tools/e7_capture/start_e7_studio.bat`).

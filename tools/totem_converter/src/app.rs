@@ -1,4 +1,5 @@
 use crate::converter::{self, CropMode, FrameData, SpritesheetLayout};
+use crate::e7_proxy;
 use eframe::egui::{self, Color32, ColorImage, RichText, TextureHandle, TextureOptions, Ui, Vec2};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -27,6 +28,7 @@ pub struct TotemApp {
     is_processing: bool,
 
     show_nikke_dialog: bool,
+    show_e7_dialog: bool,
 }
 
 impl Default for TotemApp {
@@ -56,6 +58,7 @@ impl Default for TotemApp {
             is_processing: false,
 
             show_nikke_dialog: false,
+            show_e7_dialog: false,
         }
     }
 }
@@ -545,6 +548,57 @@ impl eframe::App for TotemApp {
                 self.show_nikke_dialog = false;
             }
         }
+
+        // Dialog Epic Seven Spine Studio
+        if self.show_e7_dialog {
+            let mut is_open = true;
+            egui::Window::new("🌐 Tải Hoạt Ảnh Epic Seven (E7 Codex)")
+                .open(&mut is_open)
+                .resizable(false)
+                .collapsible(false)
+                .default_width(470.0)
+                .show(ctx, |ui| {
+                    ui.heading(RichText::new("Epic Seven Spine 60FPS Studio").strong().color(Color32::from_rgb(251, 191, 36)));
+                    ui.label("Lấy trực tiếp model Spine 3.8 từ e7codex (không nền tuyệt đối) để xuất ZIP frame, WebM Alpha hoặc Totem PNG.");
+                    ui.add_space(8.0);
+
+                    ui.label(RichText::new("Hỗ trợ đầy đủ:").strong());
+                    ui.label("• 850+ Heroes / NPCs / Monsters (Portrait & Combat Skill rigs), biểu cảm & lọc lớp FX/BG.");
+                    ui.label("• Tích hợp proxy cục bộ bên trong TotemConverter.exe (tự vượt CORS của CDN).");
+                    ui.add_space(10.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button(RichText::new("🚀 Mở Epic Seven Studio (Không Nền / 60FPS)").strong().color(Color32::WHITE)).clicked() {
+                            match e7_proxy::open_e7_studio() {
+                                Ok(url) => {
+                                    self.status_message = Some((format!("Đã mở Epic Seven Studio tại {}", url), false));
+                                }
+                                Err(err) => {
+                                    self.status_message = Some((err, true));
+                                }
+                            }
+                        }
+
+                        if ui.button("🌐 Mở e7codex.com").clicked() {
+                            let _ = std::process::Command::new("cmd")
+                                .args(["/c", "start", "", "https://e7codex.com/"])
+                                .spawn();
+                        }
+                    });
+
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("💡 Hướng dẫn nhanh:").strong().color(Color32::from_rgb(255, 205, 90)));
+                    ui.label("1. Bấm 'Mở Epic Seven Studio' (giữ cửa sổ TotemConverter.exe mở để duy trì kết nối proxy).");
+                    ui.label("2. Tìm nhân vật (vd: Frieren / c1172), chọn Portrait hoặc Combat, căn zoom/ẩn FX nếu muốn.");
+                    ui.label("3. Chọn 'Xuất File .ZIP (Chuỗi PNG)' hoặc 'Tải Ngay Totem Spritesheet (.PNG)'.");
+                    ui.label("4. Kéo file .ZIP hoặc Totem .PNG vừa tải thả vào cửa sổ TotemConverter này!");
+                });
+            if !is_open {
+                self.show_e7_dialog = false;
+            }
+        }
     }
 }
 
@@ -626,6 +680,10 @@ fn render_left_panel(ui: &mut Ui, app: &mut TotemApp, ctx: &egui::Context) {
 
                 if ui.button(RichText::new("🌐 Tải Nikke Live2D...").color(Color32::from_rgb(56, 189, 248)).strong()).clicked() {
                     app.show_nikke_dialog = true;
+                }
+
+                if ui.button(RichText::new("⚔ Tải Epic Seven...").color(Color32::from_rgb(251, 191, 36)).strong()).clicked() {
+                    app.show_e7_dialog = true;
                 }
             });
 
